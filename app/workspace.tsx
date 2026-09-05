@@ -393,7 +393,7 @@ export default function Workspace() {
       return;
     }
     if (!buildId) {
-      setError('Generate and apply a plan first.');
+      setError('Please type a prompt in the chat on the left to generate your server plan, then click "Apply to draft" before deploying.');
       return;
     }
     await run(
