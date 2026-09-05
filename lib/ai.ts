@@ -56,6 +56,8 @@ export function isAiConfigured(): boolean {
 let cachedGeminiModel: string | null = null;
 
 const CANDIDATE_GEMINI_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-2.0-flash-exp',
   'gemini-1.5-flash-latest',
@@ -102,7 +104,7 @@ export function getAiProviderInfo(): {
     return {
       configured: true,
       provider: 'Gemini',
-      model: cachedGeminiModel || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      model: cachedGeminiModel || process.env.GEMINI_MODEL || 'gemini-3.6-flash',
     };
   }
   if (process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) {
@@ -126,7 +128,7 @@ export async function generateWithGemini(
   messages: unknown[],
   live: unknown,
 ): Promise<Plan> {
-  let model = cachedGeminiModel || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  let model = cachedGeminiModel || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
   const callApi = async (modelToUse: string) => {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelToUse)}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -167,12 +169,22 @@ export async function generateWithGemini(
   let response: Response;
   try {
     response = await callApi(model);
-    if (response.status === 404) {
-      const workingModel = await findWorkingGeminiModel(apiKey, model);
-      if (workingModel && workingModel !== model) {
-        cachedGeminiModel = workingModel;
-        model = workingModel;
-        response = await callApi(workingModel);
+    if (!response.ok) {
+      const errData = (await response.clone().json().catch(() => null)) as any;
+      const msg = errData?.error?.message || '';
+      const suggestedMatch = msg.match(/use\s+models\/([a-zA-Z0-9._-]+)/i);
+      if (suggestedMatch && suggestedMatch[1]) {
+        const suggestedModel = suggestedMatch[1];
+        cachedGeminiModel = suggestedModel;
+        model = suggestedModel;
+        response = await callApi(suggestedModel);
+      } else if (response.status === 404) {
+        const workingModel = await findWorkingGeminiModel(apiKey, model);
+        if (workingModel && workingModel !== model) {
+          cachedGeminiModel = workingModel;
+          model = workingModel;
+          response = await callApi(workingModel);
+        }
       }
     }
   } catch (err: any) {
