@@ -41,16 +41,32 @@ export function decrypt(value: string) {
     'utf8',
   );
 }
-export function origin() {
-  const v = process.env.APP_ORIGIN;
-  if (!v)
-    throw new AppError('Configure APP_ORIGIN before connecting Discord.', 503);
-  return new URL(v).origin;
+export function origin(req?: Request) {
+  const v =
+    process.env.APP_ORIGIN ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+  if (v) {
+    try {
+      return new URL(v).origin;
+    } catch {}
+  }
+  if (req) {
+    try {
+      return new URL(req.url).origin;
+    } catch {}
+  }
+  return 'http://localhost:3000';
 }
 export function checkOrigin(req: Request) {
   const actual = req.headers.get('origin');
-  const expected = process.env.APP_ORIGIN ? origin() : new URL(req.url).origin;
-  if (actual !== expected || req.headers.get('x-guildforge') !== '1')
+  const expected = origin(req);
+  if (
+    actual &&
+    actual !== expected &&
+    actual !== new URL(req.url).origin
+  )
+    throw new AppError('Request origin could not be verified.', 403);
+  if (req.headers.get('x-guildforge') !== '1')
     throw new AppError('Request origin could not be verified.', 403);
 }
 export function cookie(req: Request, name: string) {

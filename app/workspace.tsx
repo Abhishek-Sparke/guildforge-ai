@@ -29,6 +29,7 @@ import {
   Command,
   Eye,
   Shield,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -76,8 +77,25 @@ type Server = {
   id: string;
   name: string;
   connected: boolean;
+  botInstalled?: boolean;
   updatedAt?: string;
+  icon?: string | null;
+  owner?: boolean;
 };
+function DiscordIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+    </svg>
+  );
+}
 const starter = demoPlan(
   'Create a professional gaming community with Valorant, Minecraft, tournaments, creators, staff and voice rooms.',
 );
@@ -275,6 +293,34 @@ export default function Workspace() {
         : '',
     );
     go('builder');
+  }
+  async function connectAndOpen(s: Server) {
+    setServerId(s.id);
+    await run(async () => {
+      const r = await request('servers/connect', { serverId: s.id });
+      setDemo(false);
+      setHistory([]);
+      setPlan(r.plan || emptyPlan);
+      setMessages([]);
+      setBuildId(undefined);
+      setPending(null);
+      setConnectOpen(false);
+      go('builder');
+      setNotice(`${s.name} connected. Describe the structure you want to add.`);
+    }, `Connecting ${s.name}`);
+  }
+  async function verifyServer(id: string) {
+    setServerId(id);
+    await run(async () => {
+      const fresh = await request('servers');
+      setServers(fresh.servers);
+      const found = fresh.servers.find((srv: Server) => srv.id === id);
+      if (found?.botInstalled || found?.connected) {
+        setNotice(`GuildForge bot detected in ${found.name}!`);
+      } else {
+        setNotice('Bot not detected yet. Authorize the bot in Discord, then click Verify again.');
+      }
+    }, 'Checking bot presence');
   }
   async function send() {
     if (!prompt.trim() || busy || pending) return;
@@ -568,12 +614,35 @@ export default function Workspace() {
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </Button>
           {user ? (
-            <Button variant="outline" onClick={() => go('settings')}>
-              {user.username}
-            </Button>
+            <button
+              className="user-profile-header-btn"
+              onClick={() => go('settings')}
+              aria-label="Open settings"
+            >
+              {user.avatar ? (
+                <img
+                  src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`}
+                  alt={user.username}
+                  className="user-header-avatar"
+                />
+              ) : (
+                <span className="user-header-fallback">
+                  {user.username.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+              <span className="user-header-name">{user.username}</span>
+            </button>
           ) : (
-            <Button variant="outline" onClick={() => setConnectOpen(true)}>
-              Connect Discord <ArrowUpRight size={15} />
+            <Button
+              className="discord-header-btn"
+              onClick={() =>
+                config.discord
+                  ? (window.location.href = '/api/auth/discord')
+                  : setConnectOpen(true)
+              }
+            >
+              <DiscordIcon size={17} />
+              <span>Login with Discord</span>
             </Button>
           )}
         </div>
@@ -616,6 +685,23 @@ export default function Workspace() {
                 <Button className="primary-cta" onClick={() => start()}>
                   Build with AI <ArrowUpRight size={18} />
                 </Button>
+                {!user ? (
+                  <Button
+                    className="discord-hero-btn"
+                    onClick={() =>
+                      config.discord
+                        ? (window.location.href = '/api/auth/discord')
+                        : setConnectOpen(true)
+                    }
+                  >
+                    <DiscordIcon size={18} />
+                    <span>Login with Discord</span>
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={() => go('dashboard')}>
+                    Go to Dashboard <ArrowRight size={16} />
+                  </Button>
+                )}
                 <a href="#how-it-works" className="secondary-link">
                   See how it works <ArrowRight size={16} />
                 </a>
@@ -935,18 +1021,26 @@ export default function Workspace() {
           </div>
           {!user ? (
             <div className="empty-state">
-              <span className="empty-icon">
-                <Users size={30} />
+              <span className="empty-icon discord-empty-orb">
+                <DiscordIcon size={38} />
               </span>
               <h2>A place for all your communities.</h2>
               <p>
-                Sign in with Discord to see the servers you manage.
+                Sign in with Discord to view the servers you manage and build them with AI.
                 <br />
-                You can explore the full demo first.
+                Or explore the interactive demo playground right now.
               </p>
               <div className="action-row">
-                <Button onClick={() => setConnectOpen(true)}>
-                  Sign in with Discord <ArrowUpRight size={16} />
+                <Button
+                  className="discord-cta-btn"
+                  onClick={() =>
+                    config.discord
+                      ? (window.location.href = '/api/auth/discord')
+                      : setConnectOpen(true)
+                  }
+                >
+                  <DiscordIcon size={18} />
+                  <span>Login with Discord</span>
                 </Button>
                 <Button variant="ghost" onClick={() => start()}>
                   Explore demo
@@ -956,33 +1050,68 @@ export default function Workspace() {
           ) : (
             <div className="server-grid">
               {servers.length ? (
-                servers.map((s) => (
-                  <article className="server-card" key={s.id}>
-                    <div className="server-card-head">
-                      <span className="server-orb">{s.name.slice(0, 2)}</span>
-                      <span className="draft-tag">
-                        {s.connected ? 'CONNECTED' : 'INSTALL BOT'}
-                      </span>
-                    </div>
-                    <h3>{s.name}</h3>
-                    <p className="mono">{s.id}</p>
-                    <p>
-                      Last connected:{' '}
-                      {s.updatedAt
-                        ? new Date(s.updatedAt).toLocaleDateString()
-                        : 'Not yet'}
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setServerId(s.id);
-                        setConnectOpen(true);
-                      }}
-                    >
-                      Open builder <ArrowUpRight size={16} />
-                    </Button>
-                  </article>
-                ))
+                servers.map((s) => {
+                  const isInstalled = Boolean(s.botInstalled || s.connected);
+                  return (
+                    <article className="server-card" key={s.id}>
+                      <div className="server-card-head">
+                        {s.icon ? (
+                          <img
+                            src={`https://cdn.discordapp.com/icons/${s.id}/${s.icon}.png?size=64`}
+                            alt={s.name}
+                            className="server-icon-img"
+                          />
+                        ) : (
+                          <span className="server-orb">{s.name.slice(0, 2).toUpperCase()}</span>
+                        )}
+                        <span
+                          className={
+                            'status-tag ' +
+                            (isInstalled ? 'tag-connected' : 'tag-bot-missing')
+                          }
+                        >
+                          {isInstalled ? 'Connected' : 'Bot not installed'}
+                        </span>
+                      </div>
+                      <h3>{s.name}</h3>
+                      <p className="mono">{s.id}</p>
+                      <p className="server-status-desc">
+                        {isInstalled
+                          ? 'Bot active & ready for community building'
+                          : 'Bot invite needed before deploying changes'}
+                      </p>
+                      {isInstalled ? (
+                        <Button
+                          className="server-action-primary"
+                          onClick={() => connectAndOpen(s)}
+                        >
+                          Open Builder <ArrowUpRight size={16} />
+                        </Button>
+                      ) : (
+                        <div className="server-actions-stack">
+                          <a
+                            className="button-link discord-install-btn"
+                            target="_blank"
+                            rel="noreferrer"
+                            href={`/api/discord/install?guild_id=${encodeURIComponent(s.id)}`}
+                          >
+                            <Plus size={15} />
+                            <span>Add GuildForge Bot</span>
+                            <ArrowUpRight size={14} />
+                          </a>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="verify-bot-btn"
+                            onClick={() => verifyServer(s.id)}
+                          >
+                            Verify connection
+                          </Button>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })
               ) : (
                 <div className="empty-state">
                   <h3>No manageable servers found.</h3>
@@ -1229,17 +1358,20 @@ export default function Workspace() {
                 </p>
               </div>
               {config.discord ? (
-                <a className="button-link" href="/api/auth/discord">
-                  Sign in with Discord <ArrowUpRight size={17} />
+                <a className="button-link discord-dialog-cta" href="/api/auth/discord">
+                  <DiscordIcon size={18} />
+                  <span>Login with Discord</span>
+                  <ArrowUpRight size={17} />
                 </a>
               ) : (
                 <div className="setup-note">
                   <Shield size={20} />
-                  <p>
-                    Discord sign-in needs external configuration. The demo is
-                    ready to explore. No real connection or deployment is being
-                    simulated as live.
-                  </p>
+                  <div>
+                    <b>Discord credentials needed</b>
+                    <p>
+                      Add <code>DISCORD_CLIENT_ID</code> and <code>DISCORD_CLIENT_SECRET</code> to your environment variables to enable live login. The demo playground is fully interactive below.
+                    </p>
+                  </div>
                 </div>
               )}
               <Button
@@ -1249,7 +1381,7 @@ export default function Workspace() {
                   start();
                 }}
               >
-                Explore the demo
+                Explore demo playground
               </Button>
             </>
           ) : (
@@ -1264,15 +1396,24 @@ export default function Workspace() {
                 <SelectContent>
                   {servers.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.name}
+                      {s.name} {s.botInstalled || s.connected ? '(Bot Installed)' : '(Needs Bot)'}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {serverId && (
                 <>
+                  <div className="dialog-server-details">
+                    <span className="mono">ID: {serverId}</span>
+                    <span className={
+                      'status-tag ' +
+                      (servers.find(s => s.id === serverId)?.botInstalled || servers.find(s => s.id === serverId)?.connected ? 'tag-connected' : 'tag-bot-missing')
+                    }>
+                      {servers.find(s => s.id === serverId)?.botInstalled || servers.find(s => s.id === serverId)?.connected ? 'Bot Installed' : 'Bot Not Installed'}
+                    </span>
+                  </div>
                   <a
-                    className="button-link outline"
+                    className="button-link discord-install-btn outline"
                     target="_blank"
                     rel="noreferrer"
                     href={
@@ -1280,7 +1421,7 @@ export default function Workspace() {
                       encodeURIComponent(serverId)
                     }
                   >
-                    Install bot in selected server <ArrowUpRight size={16} />
+                    <Plus size={15} /> Add GuildForge Bot <ArrowUpRight size={16} />
                   </a>
                   <Button
                     disabled={!!busy}

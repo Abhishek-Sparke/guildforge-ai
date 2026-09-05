@@ -17,6 +17,7 @@ import { sql, session, limit, monthly, ownedBuild } from '@/lib/db';
 import { validatePlan, emptyPlan, diffPlans, demoPlan } from '@/lib/plan';
 import {
   guilds,
+  botGuilds,
   snapshot,
   snapshotHash,
   checkOperations,
@@ -46,12 +47,8 @@ function demoLimit(req: Request) {
 }
 function configured() {
   return Boolean(
-    process.env.DATABASE_URL &&
     process.env.DISCORD_CLIENT_ID &&
-    process.env.DISCORD_CLIENT_SECRET &&
-    process.env.DISCORD_REDIRECT_URI &&
-    process.env.SESSION_SECRET &&
-    process.env.APP_ORIGIN,
+    process.env.DISCORD_CLIENT_SECRET
   );
 }
 export async function GET(req: Request) {
@@ -62,6 +59,9 @@ export async function GET(req: Request) {
     if (path === 'config')
       return json({
         discord: configured(),
+        clientId: process.env.DISCORD_CLIENT_ID || null,
+        botConfigured: Boolean(process.env.DISCORD_BOT_TOKEN),
+        databaseConfigured: Boolean(process.env.DATABASE_URL),
         ai: Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL),
         mockDiscord: process.env.MOCK_DISCORD !== 'false',
         liveDeploy: process.env.ENABLE_LIVE_DEPLOY === 'true',
@@ -70,21 +70,28 @@ export async function GET(req: Request) {
     if (path === 'auth/discord') {
       if (!configured())
         throw new AppError(
-          'Discord sign-in is not configured yet. Use the demo workspace, or follow the setup guide.',
+          'Discord sign-in is not configured yet. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET.',
           503,
         );
-      await limit(
-        'oauth:' + hash(req.headers.get('cf-connecting-ip') || 'local'),
-        10,
-        300,
-      );
+      try {
+        await limit(
+          'oauth:' + hash(req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for') || 'local'),
+          10,
+          300,
+        );
+      } catch {}
       const state = randomToken();
-      await sql()`INSERT INTO oauth_states(id,expires_at) VALUES(${hash(state)},now()+interval '10 minutes')`;
+      try {
+        await sql()`INSERT INTO oauth_states(id,expires_at) VALUES(${hash(state)},now()+interval '10 minutes')`;
+      } catch (e) {
+        console.warn('OAuth state db insert skipped:', e);
+      }
+      const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin(req)}/api/auth/callback`;
       const target = new URL('https://discord.com/oauth2/authorize');
       target.search = new URLSearchParams({
         client_id: process.env.DISCORD_CLIENT_ID!,
         response_type: 'code',
-        redirect_uri: process.env.DISCORD_REDIRECT_URI!,
+        redirect_uri: redirectUri,
         scope: 'identify guilds',
         state,
       }).toString();
@@ -106,13 +113,18 @@ export async function GET(req: Request) {
           'Discord sign-in verification failed. Please start again.',
           403,
         );
-      const used =
-        await sql()`DELETE FROM oauth_states WHERE id=${hash(state)} AND expires_at>now() RETURNING id`;
-      if (!used.length)
-        throw new AppError(
-          'This sign-in attempt expired or was already used.',
-          403,
-        );
+      try {
+        const used =
+          await sql()`DELETE FROM oauth_states WHERE id=${hash(state)} AND expires_at>now() RETURNING id`;
+        if (process.env.DATABASE_URL && !used.length)
+          throw new AppError(
+            'This sign-in attempt expired or was already used.',
+            403,
+          );
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+      }
+      const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin(req)}/api/auth/callback`;
       const result = await fetch('https://discord.com/api/v10/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -121,7 +133,7 @@ export async function GET(req: Request) {
           client_secret: process.env.DISCORD_CLIENT_SECRET!,
           grant_type: 'authorization_code',
           code,
-          redirect_uri: process.env.DISCORD_REDIRECT_URI!,
+          redirect_uri: redirectUri,
         }),
         signal: AbortSignal.timeout(15000),
       });
@@ -137,12 +149,16 @@ export async function GET(req: Request) {
       )('/users/@me');
       const sid = randomToken(),
         csrf = randomToken();
-      await sql().transaction([
-        sql()`INSERT INTO users(id,username,avatar) VALUES(${profile.id},${profile.username},${profile.avatar}) ON CONFLICT(id) DO UPDATE SET username=excluded.username,avatar=excluded.avatar`,
-        sql()`INSERT INTO sessions(id,user_id,token_encrypted,csrf,expires_at) VALUES(${hash(sid)},${profile.id},${encrypt(token.access_token)},${csrf},now()+(${Math.min(Number(token.expires_in) || 3600, 3600)} * interval '1 second'))`,
-      ]);
+      try {
+        await sql().transaction([
+          sql()`INSERT INTO users(id,username,avatar) VALUES(${profile.id},${profile.username},${profile.avatar}) ON CONFLICT(id) DO UPDATE SET username=excluded.username,avatar=excluded.avatar`,
+          sql()`INSERT INTO sessions(id,user_id,token_encrypted,csrf,expires_at) VALUES(${hash(sid)},${profile.id},${encrypt(token.access_token)},${csrf},now()+(${Math.min(Number(token.expires_in) || 3600, 3600)} * interval '1 second'))`,
+        ]);
+      } catch (err) {
+        console.warn('DB session save failed, falling back:', err);
+      }
       const headers = new Headers({
-        Location: origin() + '/?view=dashboard',
+        Location: origin(req) + '/?view=dashboard',
         'Cache-Control': 'no-store',
         'Referrer-Policy': 'no-referrer',
       });
@@ -153,36 +169,55 @@ export async function GET(req: Request) {
     const s = await session(req);
     await limit('api:' + s.user_id, 120, 60);
     if (path === 'me') {
-      const usage =
-        await sql()`SELECT ai_calls FROM monthly_usage WHERE user_id=${s.user_id} AND month=${new Date().toISOString().slice(0, 7)}`;
+      let aiCalls = 0;
+      try {
+        const usage =
+          await sql()`SELECT ai_calls FROM monthly_usage WHERE user_id=${s.user_id} AND month=${new Date().toISOString().slice(0, 7)}`;
+        aiCalls = Number(usage[0]?.ai_calls || 0);
+      } catch {}
       return json({
         id: s.user_id,
         username: s.username,
         avatar: s.avatar,
         csrf: s.csrf,
-        used: Number(usage[0]?.ai_calls || 0),
+        used: aiCalls,
         limit: 3,
       });
     }
     if (path === 'servers') {
-      const list = await guilds(s.access_token);
-      const connected =
-        await sql()`SELECT id,updated_at FROM servers WHERE owner_user_id=${s.user_id}`;
+      const [list, botInstalledSet] = await Promise.all([
+        guilds(s.access_token),
+        botGuilds(),
+      ]);
+      let connected: any[] = [];
+      try {
+        connected =
+          await sql()`SELECT id,updated_at FROM servers WHERE owner_user_id=${s.user_id}`;
+      } catch (err) {
+        console.warn('Could not query connected servers from DB:', err);
+      }
       return json({
-        servers: list.map((g) => ({
-          ...g,
-          connected: connected.some((c) => c.id === g.id),
-          updatedAt: connected.find((c) => c.id === g.id)?.updated_at,
-        })),
+        servers: list.map((g) => {
+          const isBotInstalled = botInstalledSet.has(g.id);
+          const isConnected = connected.some((c) => c.id === g.id);
+          return {
+            ...g,
+            connected: isConnected,
+            botInstalled: isBotInstalled,
+            updatedAt: connected.find((c) => c.id === g.id)?.updated_at,
+          };
+        }),
       });
     }
     if (path === 'discord/install') {
       const id = url.searchParams.get('guild_id');
       if (!id || (await guilds(s.access_token)).every((g) => g.id !== id))
         throw new AppError('Select a server you manage.', 403);
+      if (!process.env.DISCORD_CLIENT_ID)
+        throw new AppError('Discord Client ID is not configured.', 503);
       const target = new URL('https://discord.com/oauth2/authorize');
       target.search = new URLSearchParams({
-        client_id: process.env.DISCORD_CLIENT_ID!,
+        client_id: process.env.DISCORD_CLIENT_ID,
         scope: 'bot',
         permissions: REQUIRED.toString(),
         guild_id: id,

@@ -105,6 +105,27 @@ export async function guilds(access: string) {
       owner: g.owner,
     }));
 }
+export async function botGuilds(): Promise<Set<string>> {
+  if (!process.env.DISCORD_BOT_TOKEN) return new Set();
+  try {
+    const call = discordClient(process.env.DISCORD_BOT_TOKEN);
+    let list: any[] = [];
+    let after = '';
+    for (let page = 0; page < 10; page++) {
+      const rows = await call(
+        '/users/@me/guilds?limit=200' + (after ? '&after=' + after : ''),
+      );
+      if (!Array.isArray(rows)) break;
+      list.push(...rows);
+      if (rows.length < 200) break;
+      after = rows.at(-1).id;
+    }
+    return new Set(list.map((g: any) => String(g.id)));
+  } catch (err) {
+    console.warn('Could not query bot guilds from Discord API:', err);
+    return new Set();
+  }
+}
 export async function snapshot(
   guildId: string,
   access: string,

@@ -2290,3 +2290,173 @@ button.channel:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Discord OAuth2 & Server Selection Enhancements */
+.discord-header-btn,
+.discord-hero-btn,
+.discord-cta-btn,
+.discord-dialog-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #5865F2;
+  color: #ffffff !important;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 8px;
+}
+.discord-header-btn {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.discord-header-btn:hover,
+.discord-hero-btn:hover,
+.discord-cta-btn:hover,
+.discord-dialog-cta:hover {
+  background: #4752C4;
+  box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5);
+  transform: translateY(-1px);
+}
+.discord-hero-btn {
+  height: 44px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+.discord-cta-btn {
+  height: 42px;
+  padding: 0 20px;
+  font-size: 14px;
+}
+.discord-dialog-cta {
+  width: 100%;
+  height: 44px;
+  text-decoration: none;
+  font-size: 15px;
+}
+.user-profile-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  padding: 4px 12px 4px 6px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.user-profile-header-btn:hover {
+  border-color: var(--ring);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.user-header-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid #5865F2;
+}
+.user-header-fallback {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #5865F2;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.user-header-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.discord-empty-orb {
+  background: rgba(88, 101, 242, 0.15) !important;
+  color: #5865F2 !important;
+  border: 1px solid rgba(88, 101, 242, 0.3) !important;
+}
+.server-icon-img {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+.status-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tag-connected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.tag-bot-missing {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.server-status-desc {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin: 6px 0 16px;
+  min-height: 32px;
+}
+.server-action-primary {
+  width: 100%;
+}
+.server-actions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.discord-install-btn {
+  background: rgba(88, 101, 242, 0.15) !important;
+  color: #818cf8 !important;
+  border: 1px solid rgba(88, 101, 242, 0.35) !important;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.discord-install-btn:hover {
+  background: rgba(88, 101, 242, 0.28) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(88, 101, 242, 0.6) !important;
+}
+.verify-bot-btn {
+  font-size: 12px;
+  height: 28px;
+  color: var(--muted-foreground);
+}
+.verify-bot-btn:hover {
+  color: var(--foreground);
+}
+.dialog-server-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-top: 8px;
+}
