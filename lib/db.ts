@@ -1,12 +1,51 @@
 import { neon } from '@neondatabase/serverless';
+import { PGlite } from '@electric-sql/pglite';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AppError, cookie, hash, decrypt } from './security';
+
+let localDb: PGlite | null = null;
+let localInitPromise: Promise<void> | null = null;
+
+async function getLocalDb() {
+  if (!localDb) {
+    localDb = new PGlite();
+    localInitPromise = (async () => {
+      try {
+        const schema = readFileSync(join(process.cwd(), 'db', '001_initial.sql'), 'utf8');
+        await localDb!.exec(schema);
+      } catch (e) {
+        console.warn('Local PGlite schema init warning:', e);
+      }
+    })();
+  }
+  if (localInitPromise) await localInitPromise;
+  return localDb;
+}
+
+function createLocalSql() {
+  const queryFn: any = (strings: TemplateStringsArray, ...values: any[]) => {
+    return (async () => {
+      const db = await getLocalDb();
+      let query = strings[0];
+      for (let i = 0; i < values.length; i++) {
+        query += `$${i + 1}` + strings[i + 1];
+      }
+      const res = await db.query(query, values);
+      return res.rows;
+    })();
+  };
+  queryFn.transaction = async (queries: Promise<any>[]) => {
+    return Promise.all(queries);
+  };
+  return queryFn;
+}
+
 export function sql() {
-  if (!process.env.DATABASE_URL)
-    throw new AppError(
-      'PostgreSQL is not configured. Demo mode is available without an account.',
-      503,
-    );
-  return neon(process.env.DATABASE_URL);
+  if (process.env.DATABASE_URL) {
+    return neon(process.env.DATABASE_URL);
+  }
+  return createLocalSql();
 }
 export type Session = {
   user_id: string;
