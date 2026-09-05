@@ -1313,7 +1313,13 @@ export default function Workspace() {
             </div>
             <div className="setting-row">
               <span>AI provider</span>
-              <b>{config.ai ? 'OpenAI configured' : 'Preset demo engine'}</b>
+              <b>
+                {config.aiProvider
+                  ? `${config.aiProvider} (${config.aiModel || 'active'})`
+                  : config.ai
+                    ? 'AI configured'
+                    : 'Preset demo engine (GEMINI_API_KEY optional)'}
+              </b>
             </div>
             <div className="setting-row">
               <span>Appearance</span>

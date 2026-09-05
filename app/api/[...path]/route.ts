@@ -14,7 +14,7 @@ import {
   assertDestruction,
 } from '@/lib/security';
 import { sql, session, limit, monthly, ownedBuild } from '@/lib/db';
-import { validatePlan, emptyPlan, diffPlans, demoPlan } from '@/lib/plan';
+import { validatePlan, emptyPlan, diffPlans, demoPlan, type Plan } from '@/lib/plan';
 import {
   guilds,
   botGuilds,
@@ -26,7 +26,7 @@ import {
   REQUIRED,
   mockExecute,
 } from '@/lib/discord';
-import { generate } from '@/lib/ai';
+import { generate, isAiConfigured, getAiProviderInfo } from '@/lib/ai';
 export const dynamic = 'force-dynamic';
 const demoWindows = new Map<string, { count: number; until: number }>();
 function demoLimit(req: Request) {
@@ -56,17 +56,21 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url),
       path = url.pathname.replace(/^\/api\//, '');
-    if (path === 'config')
+    if (path === 'config') {
+      const aiInfo = getAiProviderInfo();
       return json({
         discord: configured(),
         clientId: process.env.DISCORD_CLIENT_ID || null,
         botConfigured: Boolean(process.env.DISCORD_BOT_TOKEN),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
-        ai: Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL),
+        ai: aiInfo.configured,
+        aiProvider: aiInfo.provider,
+        aiModel: aiInfo.model,
         mockDiscord: process.env.MOCK_DISCORD !== 'false',
         liveDeploy: process.env.ENABLE_LIVE_DEPLOY === 'true',
         demo: true,
       });
+    }
     if (path === 'auth/discord') {
       if (!configured())
         throw new AppError(
@@ -267,13 +271,27 @@ export async function POST(req: Request) {
       )
         throw new AppError('Use a prompt between 3 and 2,000 characters.');
       const current = input.current ? validatePlan(input.current) : undefined;
-      const plan = demoPlan(input.prompt, current);
+      let plan: Plan;
+      let aiUsed = false;
+      if (isAiConfigured()) {
+        try {
+          plan = await generate(input.prompt, current || null, [], null);
+          aiUsed = true;
+        } catch (e) {
+          console.warn('Live AI demo generation failed, using preset:', e);
+          plan = demoPlan(input.prompt, current);
+        }
+      } else {
+        plan = demoPlan(input.prompt, current);
+      }
       return json({
         plan,
         changes: diffPlans(current || emptyPlan, plan),
         simulated: true,
-        message:
-          'Demo uses preset generation rules. Live AI requires configuration.',
+        aiUsed,
+        message: aiUsed
+          ? 'Generated with ' + (getAiProviderInfo().provider || 'AI')
+          : 'Demo uses preset generation rules. Live AI requires GEMINI_API_KEY.',
       });
     }
     if (path === 'demo/deploy') {
@@ -347,9 +365,9 @@ export async function POST(req: Request) {
       if (previous && previous.server_id !== input.serverId)
         throw new AppError('Build belongs to another server.', 403);
       const live = await snapshot(input.serverId, s.access_token);
-      if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL)
+      if (!isAiConfigured())
         throw new AppError(
-          'Live AI is not configured. The demo workspace is available.',
+          'Live AI is not configured. Set GEMINI_API_KEY (or OPENAI_API_KEY) to enable.',
           503,
         );
       const used = await monthly(s.user_id);
