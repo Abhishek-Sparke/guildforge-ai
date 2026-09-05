@@ -1709,6 +1709,57 @@ button.channel:hover {
   color: var(--primary);
   margin-top: 4px;
 }
+.oauth-transparency-box {
+  background: var(--accent);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.oauth-transparency-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+.oauth-scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.oauth-scope-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
+}
+.oauth-scope-item code {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.oauth-security-note {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 6px;
+}
+.dialog-bot-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 8px 0;
+}
 .result-logs {
   max-height: 45vh;
   overflow: auto;

@@ -1078,7 +1078,7 @@ export default function Workspace() {
                       <p className="server-status-desc">
                         {isInstalled
                           ? 'Bot active & ready for community building'
-                          : 'Bot invite needed before deploying changes'}
+                          : "GuildForge is connected to your Discord account, but the bot isn't installed in this server yet."}
                       </p>
                       {isInstalled ? (
                         <Button
@@ -1348,15 +1348,36 @@ export default function Workspace() {
             <>
               <div className="connect-steps">
                 <p>
-                  <b>01</b> Sign in to see servers you manage.
+                  <b>01</b> Sign in with Discord to verify your identity and manage servers.
                 </p>
                 <p>
-                  <b>02</b> Install the bot with limited permissions.
+                  <b>02</b> Install the GuildForge bot into your server with scoped permissions.
                 </p>
                 <p>
-                  <b>03</b> Design, review and approve your changes.
+                  <b>03</b> Design, preview with AI, and deploy verified changes.
                 </p>
               </div>
+
+              <div className="oauth-transparency-box">
+                <div className="oauth-transparency-title">
+                  <Shield size={15} />
+                  <span>Discord Permissions Requested</span>
+                </div>
+                <div className="oauth-scope-list">
+                  <div className="oauth-scope-item">
+                    <code>identify</code>
+                    <span>Retrieves your Discord username, avatar, and user ID for secure session authentication.</span>
+                  </div>
+                  <div className="oauth-scope-item">
+                    <code>guilds</code>
+                    <span>Lists servers where you hold Manage Server authority so you can choose which community to configure.</span>
+                  </div>
+                </div>
+                <p className="oauth-security-note">
+                  🔒 <strong>User login does NOT modify servers:</strong> GuildForge uses OAuth only to know who you are. All server configurations are executed strictly by the GuildForge bot via official bot API credentials. We never request your email, private messages, or user-level server edit rights.
+                </p>
+              </div>
+
               {config.discord ? (
                 <a className="button-link discord-dialog-cta" href="/api/auth/discord">
                   <DiscordIcon size={18} />
@@ -1412,6 +1433,11 @@ export default function Workspace() {
                       {servers.find(s => s.id === serverId)?.botInstalled || servers.find(s => s.id === serverId)?.connected ? 'Bot Installed' : 'Bot Not Installed'}
                     </span>
                   </div>
+                  {!(servers.find(s => s.id === serverId)?.botInstalled || servers.find(s => s.id === serverId)?.connected) && (
+                    <div className="dialog-bot-warning">
+                      <p>GuildForge is connected to your Discord account, but the bot isn&apos;t installed in this server yet.</p>
+                    </div>
+                  )}
                   <a
                     className="button-link discord-install-btn outline"
                     target="_blank"

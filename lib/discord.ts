@@ -138,20 +138,39 @@ export async function snapshot(
       403,
     );
   const call = discordClient();
-  const [guild, channels, roles, bot] = await Promise.all([
-    call('/guilds/' + guildId),
-    call('/guilds/' + guildId + '/channels'),
-    call('/guilds/' + guildId + '/roles'),
-    call('/users/@me'),
-  ]);
-  const member = await call('/guilds/' + guildId + '/members/' + bot.id);
+  let guild: any, channels: any, roles: any, bot: any;
+  try {
+    [guild, channels, roles, bot] = await Promise.all([
+      call('/guilds/' + guildId),
+      call('/guilds/' + guildId + '/channels'),
+      call('/guilds/' + guildId + '/roles'),
+      call('/users/@me'),
+    ]);
+  } catch (err: any) {
+    if (err instanceof AppError && (err.status === 404 || err.status === 403)) {
+      throw new AppError(
+        "GuildForge is connected to your Discord account, but the bot isn't installed in this server yet.",
+        404,
+      );
+    }
+    throw err;
+  }
+  let member: any;
+  try {
+    member = await call('/guilds/' + guildId + '/members/' + bot.id);
+  } catch {
+    throw new AppError(
+      "GuildForge is connected to your Discord account, but the bot isn't installed in this server yet.",
+      404,
+    );
+  }
   const mine = (roles as DiscordRole[]).filter(
     (r) => r.id === guildId || member.roles.includes(r.id),
   );
   const bits = mine.reduce((a, r) => a | BigInt(r.permissions), 0n);
   if (!(bits & 8n) && (bits & REQUIRED) !== REQUIRED)
     throw new AppError(
-      'The bot needs Manage Channels, Manage Roles, View Channels, Send Messages, Read Message History, Connect and Speak.',
+      'The GuildForge bot is installed but lacks required permissions. It needs Manage Channels, Manage Roles, View Channels, Send Messages, Read Message History, Connect and Speak.',
       403,
     );
   return {

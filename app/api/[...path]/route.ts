@@ -211,19 +211,22 @@ export async function GET(req: Request) {
     }
     if (path === 'discord/install') {
       const id = url.searchParams.get('guild_id');
-      if (!id || (await guilds(s.access_token)).every((g) => g.id !== id))
+      if (id && (await guilds(s.access_token)).every((g) => g.id !== id))
         throw new AppError('Select a server you manage.', 403);
       if (!process.env.DISCORD_CLIENT_ID)
         throw new AppError('Discord Client ID is not configured.', 503);
       const target = new URL('https://discord.com/oauth2/authorize');
-      target.search = new URLSearchParams({
+      const params: Record<string, string> = {
         client_id: process.env.DISCORD_CLIENT_ID,
         scope: 'bot',
         permissions: REQUIRED.toString(),
-        guild_id: id,
-        disable_guild_select: 'true',
         integration_type: '0',
-      }).toString();
+      };
+      if (id) {
+        params.guild_id = id;
+        params.disable_guild_select = 'true';
+      }
+      target.search = new URLSearchParams(params).toString();
       return Response.redirect(target.toString(), 302);
     }
     if (path === 'builds') {
