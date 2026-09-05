@@ -527,28 +527,32 @@ export default function Workspace() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           maxLength={2000}
-          placeholder="Describe your community or a change…"
+          placeholder="Describe your community or a change… (Press Enter ↵ to send)"
           aria-label="Community prompt"
           disabled={!!busy || !!pending}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              send();
+              if (prompt.trim().length >= 3 && !busy && !pending) {
+                send();
+              }
             }
           }}
         />
         <div className="composer-bottom">
           <span>
             <Sparkles size={13} />
-            {demo ? 'Preset demo engine' : 'Structured AI plan'} ·{' '}
+            {config.aiProvider || (demo ? 'Preset demo engine' : 'Structured AI plan')} ·{' '}
             {prompt.length}/2000
           </span>
           <Button
             aria-label="Generate server plan"
             type="submit"
+            className="composer-send-btn"
             disabled={!!busy || !!pending || prompt.trim().length < 3}
           >
-            <ArrowUp size={18} />
+            <span>Send</span>
+            <ArrowUp size={16} />
           </Button>
         </div>
       </form>

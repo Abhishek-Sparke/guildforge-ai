@@ -1029,9 +1029,9 @@ button.channel:hover {
 .desktop-workspace {
   display: grid;
   grid-template-columns: 36% 64%;
-  height: 660px;
-  max-height: calc(100vh - 280px);
-  min-height: 525px;
+  height: 720px;
+  max-height: calc(100vh - 160px);
+  min-height: 580px;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -1039,10 +1039,12 @@ button.channel:hover {
 .chat-panel {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
   min-width: 0;
   background: var(--background);
   border-right: 1px solid var(--border);
+  overflow: hidden;
 }
 .panel-top {
   height: 47px;
@@ -1069,8 +1071,9 @@ button.channel:hover {
 }
 .conversation {
   overflow-y: auto;
-  flex: 1;
-  padding: 23px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 18px;
 }
 .assistant-intro > small {
   display: block;
@@ -1112,28 +1115,29 @@ button.channel:hover {
   color: var(--muted-foreground) !important;
 }
 .composer {
-  margin: 10px 15px 0;
+  margin: 8px 14px 0;
   border: 1px solid var(--input);
   background: var(--card);
   border-radius: 10px;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 .composer:focus-within {
   border-color: var(--primary);
 }
 .composer textarea {
   width: 100%;
-  resize: vertical;
-  min-height: 80px;
-  max-height: 170px;
+  resize: none;
+  min-height: 65px;
+  max-height: 120px;
   background: none;
   border: 0;
   outline: none;
   color: var(--foreground);
   font: inherit;
   font-size: 13px;
-  padding: 13px 15px;
-  line-height: 1.6;
+  padding: 10px 14px;
+  line-height: 1.5;
 }
 .composer textarea::placeholder {
   color: var(--muted-foreground);
@@ -1142,21 +1146,33 @@ button.channel:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 7px;
-  padding: 0 10px 10px;
+  gap: 8px;
+  padding: 4px 10px 8px;
 }
 .composer-bottom > span {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted-foreground);
   display: flex;
   gap: 5px;
   align-items: center;
 }
-.composer-bottom [data-slot='button'] {
-  min-height: 30px;
-  height: 30px;
-  width: 30px;
-  padding: 4px;
+.composer-send-btn {
+  min-height: 32px !important;
+  height: 32px !important;
+  width: auto !important;
+  padding: 0 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  cursor: pointer !important;
+}
+.composer-send-btn:hover:not(:disabled) {
+  opacity: 0.9 !important;
 }
 .chat-footnote {
   font-size: 9px;
