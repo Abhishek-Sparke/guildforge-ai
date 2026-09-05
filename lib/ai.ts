@@ -53,6 +53,41 @@ export function isAiConfigured(): boolean {
   );
 }
 
+let cachedGeminiModel: string | null = null;
+
+const CANDIDATE_GEMINI_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-pro-latest',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+];
+
+async function findWorkingGeminiModel(apiKey: string, preferred: string): Promise<string> {
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (listRes.ok) {
+      const data = (await listRes.json()) as any;
+      const models: string[] = (data.models || [])
+        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+        .map((m: any) => m.name.replace(/^models\//, ''));
+
+      if (models.includes(preferred)) return preferred;
+      for (const candidate of CANDIDATE_GEMINI_MODELS) {
+        if (models.includes(candidate)) return candidate;
+      }
+      const flashModel = models.find((m) => m.includes('flash'));
+      if (flashModel) return flashModel;
+      if (models.length > 0) return models[0];
+    }
+  } catch {}
+  return preferred;
+}
+
 export function getAiProviderInfo(): {
   configured: boolean;
   provider: 'Gemini' | 'OpenAI' | null;
@@ -67,7 +102,7 @@ export function getAiProviderInfo(): {
     return {
       configured: true,
       provider: 'Gemini',
-      model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+      model: cachedGeminiModel || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     };
   }
   if (process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) {
@@ -91,12 +126,11 @@ export async function generateWithGemini(
   messages: unknown[],
   live: unknown,
 ): Promise<Plan> {
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  let model = cachedGeminiModel || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const callApi = async (modelToUse: string) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelToUse)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    return fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -128,6 +162,19 @@ export async function generateWithGemini(
       }),
       signal: AbortSignal.timeout(60000),
     });
+  };
+
+  let response: Response;
+  try {
+    response = await callApi(model);
+    if (response.status === 404) {
+      const workingModel = await findWorkingGeminiModel(apiKey, model);
+      if (workingModel && workingModel !== model) {
+        cachedGeminiModel = workingModel;
+        model = workingModel;
+        response = await callApi(workingModel);
+      }
+    }
   } catch (err: any) {
     if (err?.name === 'TimeoutError' || err?.message?.includes('timeout')) {
       throw new AppError(
@@ -146,6 +193,8 @@ export async function generateWithGemini(
     const msg = errData?.error?.message || response.statusText;
     throw new AppError(`Gemini error (${response.status}): ${msg}`, 502);
   }
+
+  cachedGeminiModel = model;
 
   const result = (await response.json()) as any;
   const candidate = result.candidates?.[0];
