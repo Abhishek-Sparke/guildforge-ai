@@ -42,20 +42,27 @@ export function decrypt(value: string) {
   );
 }
 export function origin(req?: Request) {
-  const v =
-    process.env.APP_ORIGIN ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
-  if (v) {
-    try {
-      return new URL(v).origin;
-    } catch {}
-  }
   if (req) {
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    if (host) {
+      const isLocal = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+      return `${isLocal ? 'http' : proto}://${host}`;
+    }
     try {
-      return new URL(req.url).origin;
+      const u = new URL(req.url);
+      if (u.origin && u.origin !== 'null') return u.origin;
     } catch {}
   }
-  return 'http://localhost:3000';
+  if (process.env.APP_ORIGIN && !process.env.APP_ORIGIN.includes('localhost')) {
+    try {
+      return new URL(process.env.APP_ORIGIN).origin;
+    } catch {}
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return process.env.APP_ORIGIN || 'http://localhost:3000';
 }
 export function checkOrigin(req: Request) {
   const actual = req.headers.get('origin');
@@ -77,7 +84,11 @@ export function cookie(req: Request, name: string) {
     ?.slice(name.length + 1);
 }
 export function sessionCookie(name: string, value: string, age = 3600) {
-  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${process.env.APP_ORIGIN?.startsWith('https:') ? '; Secure' : ''}`;
+  const isSecure =
+    process.env.NODE_ENV === 'production' ||
+    process.env.APP_ORIGIN?.startsWith('https:') ||
+    Boolean(process.env.VERCEL);
+  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${isSecure ? '; Secure' : ''}`;
 }
 export async function body(req: Request) {
   if (Number(req.headers.get('content-length')) > 100000)

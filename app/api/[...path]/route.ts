@@ -51,6 +51,20 @@ function configured() {
     process.env.DISCORD_CLIENT_SECRET
   );
 }
+function getRedirectUri(req: Request) {
+  if (process.env.DISCORD_REDIRECT_URI && process.env.DISCORD_REDIRECT_URI.trim()) {
+    const configuredUri = process.env.DISCORD_REDIRECT_URI.trim();
+    const isLocalhost =
+      configuredUri.includes('localhost') || configuredUri.includes('127.0.0.1');
+    const reqOrigin = origin(req);
+    const isRemoteReq =
+      !reqOrigin.includes('localhost') && !reqOrigin.includes('127.0.0.1');
+    if (!(isLocalhost && isRemoteReq)) {
+      return configuredUri;
+    }
+  }
+  return `${origin(req)}/api/auth/callback`;
+}
 export async function GET(req: Request) {
   const requestId = randomToken().slice(0, 12);
   try {
@@ -66,6 +80,7 @@ export async function GET(req: Request) {
         ai: aiInfo.configured,
         aiProvider: aiInfo.provider,
         aiModel: aiInfo.model,
+        redirectUri: getRedirectUri(req),
         mockDiscord: process.env.MOCK_DISCORD !== 'false',
         liveDeploy: process.env.ENABLE_LIVE_DEPLOY === 'true',
         demo: true,
@@ -90,7 +105,7 @@ export async function GET(req: Request) {
       } catch (e) {
         console.warn('OAuth state db insert skipped:', e);
       }
-      const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin(req)}/api/auth/callback`;
+      const redirectUri = getRedirectUri(req);
       const target = new URL('https://discord.com/oauth2/authorize');
       target.search = new URLSearchParams({
         client_id: process.env.DISCORD_CLIENT_ID!,
@@ -128,7 +143,7 @@ export async function GET(req: Request) {
       } catch (err) {
         if (err instanceof AppError) throw err;
       }
-      const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin(req)}/api/auth/callback`;
+      const redirectUri = getRedirectUri(req);
       const result = await fetch('https://discord.com/api/v10/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
