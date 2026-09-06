@@ -1253,27 +1253,104 @@ button.channel:hover {
 .staged {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 15px;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.28);
+}
+.staged-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.staged-header-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .staged-title {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--primary);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.staged-badge {
+  font-size: 11px;
+  background: rgba(125, 222, 77, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(125, 222, 77, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 550;
+}
+.staged-hint {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+  margin: 0;
+}
+.staged-hint strong {
+  color: var(--foreground);
+}
+.apply-btn-prominent {
+  background: var(--primary) !important;
+  color: #0b1108 !important;
+  font-weight: 650 !important;
+  box-shadow: 0 0 14px rgba(125, 222, 77, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.apply-btn-prominent:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(125, 222, 77, 0.55);
+}
+.preview-pending-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.preview-pending-bar .pending-badge {
+  font-size: 11px;
+  background: rgba(225, 179, 109, 0.15);
+  color: #e1b36d;
+  border: 1px solid rgba(225, 179, 109, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.preview-pending-bar .apply-btn-pill {
+  font-size: 11px;
+  height: 28px;
+  padding: 0 11px;
+  background: var(--primary);
+  color: #0b1108;
+  font-weight: 650;
+  border-radius: 999px;
+}
+.preview-pending-bar .apply-btn-pill:hover {
+  opacity: 0.92;
 }
 .change-list {
-  padding: 8px 0;
+  padding: 4px 0;
   overflow-y: auto;
-  max-height: 360px;
+  max-height: 220px;
 }
 .change {
   display: flex;
   gap: 10px;
   border-bottom: 1px solid var(--border);
-  padding: 11px 0;
+  padding: 10px 0;
   font-size: 12px;
 }
 .change > span {
@@ -1308,7 +1385,14 @@ button.channel:hover {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  margin-top: 15px;
+}
+.action-row-top {
+  margin-top: 2px;
+}
+.action-row-bottom {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
 }
 .spin {
   animation: spin 1s linear infinite;

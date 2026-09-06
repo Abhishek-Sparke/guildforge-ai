@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   ArrowUpRight,
   ArrowUp,
@@ -148,6 +148,12 @@ export default function Workspace() {
   const [theme, setTheme] = useState('dark');
   const [language, setLanguage] = useState('English');
   const [mobileTab, setMobileTab] = useState('chat');
+  const stagedRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (pending && stagedRef.current) {
+      stagedRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [pending]);
   function go(v: View) {
     setView(v);
     window.history.replaceState(null, '', '#' + v);
@@ -358,9 +364,8 @@ export default function Workspace() {
         { role: 'user', content: text },
         {
           role: 'assistant',
-          content: demo
-            ? 'I’ve prepared a demo plan using preset rules. Review the changes before applying them.'
-            : 'Your plan passed validation. Review the changes below before applying them to your draft.',
+          content:
+            'I’ve prepared a server architecture based on your prompt. Review the changes below and click "Apply to draft" to update your server preview.',
         },
       ]);
       if (data.used) setUser((u: any) => ({ ...u, used: data.used }));
@@ -384,7 +389,7 @@ export default function Workspace() {
         ...h,
       ]);
     setPending(null);
-    setNotice('Draft updated. Discord has not been changed.');
+    setNotice('Draft updated! You can inspect the preview or click "Deploy to Discord" when ready.');
   }
   async function reviewDeploy() {
     setConfirmDelete(false);
@@ -506,17 +511,36 @@ export default function Workspace() {
           </div>
         ))}
         {pending && (
-          <div className="staged">
-            <div className="staged-title">
-              <CheckCircle2 size={17} /> Plan ready to review
+          <div className="staged" ref={stagedRef}>
+            <div className="staged-header">
+              <div className="staged-header-info">
+                <div className="staged-title">
+                  <CheckCircle2 size={17} /> Plan ready to review
+                </div>
+                <span className="staged-badge">
+                  {pending.changes.length}{' '}
+                  {pending.changes.length === 1 ? 'change' : 'changes'}
+                </span>
+              </div>
+              <div className="action-row action-row-top">
+                <Button onClick={apply} className="apply-btn-prominent">
+                  Apply to draft <Check size={14} />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setPending(null)}>
+                  Discard
+                </Button>
+              </div>
             </div>
+            <p className="staged-hint">
+              Review changes below and click <strong>Apply to draft</strong> to update the live preview.
+            </p>
             <Changes changes={pending.changes} />
-            <div className="action-row">
-              <Button onClick={apply}>
+            <div className="action-row action-row-bottom">
+              <Button onClick={apply} className="apply-btn-prominent">
                 Apply to draft <Check size={14} />
               </Button>
-              <Button variant="ghost" onClick={() => setPending(null)}>
-                Cancel
+              <Button variant="ghost" size="sm" onClick={() => setPending(null)}>
+                Discard
               </Button>
             </div>
           </div>
@@ -570,9 +594,8 @@ export default function Workspace() {
       </form>
       <p className="chat-footnote">
         {demo
-          ? 'Temporary demo · export your plan to keep it.'
-          : 'Plans are saved to your account.'}{' '}
-        Review before deployment.
+          ? 'Draft changes saved locally · Review before deployment.'
+          : 'Plans are saved to your account. Review before deployment.'}
       </p>
     </section>
   );
@@ -582,9 +605,16 @@ export default function Workspace() {
         <span>
           <Eye size={16} /> Live preview
         </span>
-        <span className="preview-label">
-          {pending ? 'PENDING CHANGES' : 'DRAFT'}
-        </span>
+        {pending ? (
+          <div className="preview-pending-bar">
+            <span className="pending-badge">Pending Review</span>
+            <Button size="sm" onClick={apply} className="apply-btn-pill">
+              Apply to draft <Check size={13} />
+            </Button>
+          </div>
+        ) : (
+          <span className="preview-label">DRAFT</span>
+        )}
       </div>
       <Preview plan={shown} />
       <div className="preview-footer">
