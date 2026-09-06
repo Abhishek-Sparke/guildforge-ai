@@ -122,6 +122,41 @@ test('permission validation and snapshots detect permission drift', () => {
   const a = snapshotHash(s);
   s.botPermissions = '0';
   assert.notEqual(snapshotHash(s), a);
+  s.botPermissions = REQUIRED.toString();
+  // Verify snapshotHash invariance under permission_overwrites and features order variations
+  const sOrderA: Snapshot = {
+    ...s,
+    guild: { ...s.guild, features: ['COMMUNITY', 'DISCOVERABLE'] },
+    channels: [
+      {
+        id: '1',
+        name: 'chat',
+        type: 0,
+        parent_id: null,
+        permission_overwrites: [
+          { id: '10', type: 0, allow: '1024', deny: '0' },
+          { id: '20', type: 0, allow: '0', deny: '2048' },
+        ],
+      },
+    ],
+  };
+  const sOrderB: Snapshot = {
+    ...s,
+    guild: { ...s.guild, features: ['DISCOVERABLE', 'COMMUNITY'] },
+    channels: [
+      {
+        id: '1',
+        name: 'chat',
+        type: 0,
+        parent_id: null,
+        permission_overwrites: [
+          { id: '20', type: 0, allow: '0', deny: '2048' },
+          { id: '10', type: 0, allow: '1024', deny: '0' },
+        ],
+      },
+    ],
+  };
+  assert.equal(snapshotHash(sOrderA), snapshotHash(sOrderB));
   const role = sample.roles[0];
   s.roles = [{ id: 'role', name: role.name, permissions: '0', position: 15 }];
   const updated = structuredClone(sample);

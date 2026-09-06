@@ -1,5 +1,6 @@
 import { AppError, canManage, hash } from './security';
 import { flatten, validatePlan, type Plan, type Change } from './plan';
+import { canonical } from './canonical';
 export const REQUIRED =
   16n | 268435456n | 1024n | 2048n | 65536n | 1048576n | 2097152n;
 export type DiscordRole = {
@@ -189,24 +190,36 @@ export async function snapshot(
 }
 export function snapshotHash(s: Snapshot) {
   return hash(
-    JSON.stringify({
-      guild: s.guild,
+    canonical({
+      guild: {
+        id: s.guild.id,
+        name: s.guild.name,
+        owner_id: s.guild.owner_id,
+        features: [...(s.guild.features || [])].sort(),
+      },
       channels: [...s.channels]
         .sort((a, b) => a.id.localeCompare(b.id))
         .map((c) => ({
           id: c.id,
           name: c.name,
           type: c.type,
-          parent_id: c.parent_id,
+          parent_id: c.parent_id || null,
           topic: c.topic || '',
-          permission_overwrites: c.permission_overwrites || [],
+          permission_overwrites: [...(c.permission_overwrites || [])]
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .map((po) => ({
+              id: po.id,
+              type: po.type,
+              allow: String(po.allow),
+              deny: String(po.deny),
+            })),
         })),
       roles: [...s.roles]
         .sort((a, b) => a.id.localeCompare(b.id))
         .map((r) => ({
           id: r.id,
           name: r.name,
-          permissions: r.permissions,
+          permissions: String(r.permissions),
           position: r.position,
         })),
       botPermissions: s.botPermissions,

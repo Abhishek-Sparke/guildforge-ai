@@ -1563,9 +1563,30 @@ export default function Workspace() {
               : 'Approve & deploy to this server'}
           </Button>
           {error && (
-            <p className="inline-error" role="alert">
-              {error}
-            </p>
+            <div className="review-error-block">
+              <p className="inline-error" role="alert">
+                {error}
+              </p>
+              {!review?.demo && buildId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="outline"
+                  disabled={!!busy}
+                  onClick={async () => {
+                    await run(
+                      async () =>
+                        setReview(
+                          await request('discord/validate', { buildId }),
+                        ),
+                      'Refreshing server review and diff',
+                    );
+                  }}
+                >
+                  <Sparkles size={14} /> Review fresh diff
+                </Button>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>

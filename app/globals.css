@@ -1644,6 +1644,11 @@ button.channel:hover {
 .review-dialog .change-list {
   max-height: 32vh;
 }
+.review-error-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .review-target {
   display: flex;
   align-items: center;

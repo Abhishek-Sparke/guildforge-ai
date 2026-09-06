@@ -431,7 +431,7 @@ export async function POST(req: Request) {
       const live = await snapshot(build.server_id, s.access_token);
       checkOperations(plan, changes, live, server[0].object_map);
       const id = randomToken();
-      await sql()`INSERT INTO approvals(id,user_id,build_id,server_id,plan_hash,snapshot_hash,changes,expires_at) VALUES(${hash(id)},${s.user_id},${build.id},${build.server_id},${hash(JSON.stringify(plan))},${snapshotHash(live)},${JSON.stringify(changes)}::jsonb,now()+interval '5 minutes')`;
+      await sql()`INSERT INTO approvals(id,user_id,build_id,server_id,plan_hash,snapshot_hash,changes,expires_at) VALUES(${hash(id)},${s.user_id},${build.id},${build.server_id},${hash(canonical(plan))},${snapshotHash(live)},${JSON.stringify(changes)}::jsonb,now()+interval '5 minutes')`;
       return json({
         approval: id,
         changes,
@@ -469,7 +469,8 @@ export async function POST(req: Request) {
       const b = await ownedBuild(a.build_id, s.user_id);
       const plan = validatePlan(b.plan);
       if (
-        hash(JSON.stringify(plan)) !== a.plan_hash ||
+        (hash(canonical(plan)) !== a.plan_hash &&
+          hash(JSON.stringify(plan)) !== a.plan_hash) ||
         input.serverId !== a.server_id
       )
         throw new AppError(
