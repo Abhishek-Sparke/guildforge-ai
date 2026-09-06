@@ -285,20 +285,35 @@ export function checkOperations(
             'This category contains unmanaged channels and cannot be removed.',
           );
       }
-    } else if (
-      o.kind === 'role'
-        ? s.roles.some((r) => r.name.toLowerCase() === o.name.toLowerCase())
-        : s.channels.some(
-            (ch) =>
-              ch.name.toLowerCase() === o.name.toLowerCase() &&
-              (o.kind === 'category'
-                ? ch.type === 4
-                : ch.parent_id === (map[String(o.data.parent)] || null)),
-          )
-    )
-      throw new AppError(
-        `An existing ${o.kind} named ${o.name} would conflict with this plan. Rename the planned object.`,
+    } else if (o.kind === 'role') {
+      const existing = s.roles.find(
+        (r) => r.name.toLowerCase() === o.name.toLowerCase(),
       );
+      if (existing) {
+        if (
+          existing.managed ||
+          existing.id === s.guild.id ||
+          existing.position >= s.botPosition
+        ) {
+          throw new AppError(
+            `An existing role named ${o.name} would conflict with this plan (it is managed by another integration or above the GuildForge bot). Rename the planned role.`,
+          );
+        }
+        map[o.key] = existing.id;
+      }
+    } else if (
+      s.channels.some(
+        (ch) =>
+          ch.name.toLowerCase() === o.name.toLowerCase() &&
+          (o.kind === 'category'
+            ? ch.type === 4
+            : ch.parent_id === (map[String(o.data.parent)] || null)),
+      )
+    ) {
+      throw new AppError(
+        `An existing channel or category named ${o.name} would conflict with this plan. Rename the planned object.`,
+      );
+    }
   }
 }
 export function overwrites(
@@ -338,6 +353,9 @@ export async function executeChange(
 ) {
   const { object: o, action } = change;
   const id = map[o.key];
+  if (o.kind === 'role' && action === 'create' && id) {
+    return id;
+  }
   const root =
     o.kind === 'role' ? `/guilds/${guild}/roles` : `/guilds/${guild}/channels`;
   const target = o.kind === 'role' ? root + '/' + id : '/channels/' + id;
