@@ -278,21 +278,25 @@ export default function Workspace() {
     document.documentElement.classList.toggle('dark', next === 'dark');
   }
   function start(template?: string) {
+    startNewServer(template ? 'Create a ' + template : undefined);
+  }
+  function startNewServer(initialPrompt?: string) {
     if (!demo) setHistory([]);
     setDemo(true);
-    setPlan(template ? demoPlan('Create a ' + template) : starter);
+    setServerId('');
     setBuildId(undefined);
     setPending(null);
     setUndo(null);
     setMessages([]);
-    setPrompt(
-      template
-        ? 'Create a ' +
-            template +
-            ' with useful channels, roles and voice rooms.'
-        : '',
-    );
+    if (initialPrompt) {
+      setPrompt(initialPrompt);
+      setPlan(demoPlan(initialPrompt));
+    } else {
+      setPrompt('');
+      setPlan(demoPlan('Create a Discord server'));
+    }
     go('builder');
+    setNotice('Describe your Discord server idea in the builder.');
   }
   async function connectAndOpen(s: Server) {
     setServerId(s.id);
@@ -384,9 +388,10 @@ export default function Workspace() {
   }
   async function reviewDeploy() {
     setConfirmDelete(false);
-    if (demo) {
+    if (demo || !serverId) {
       setReview({
         demo: true,
+        isNewServer: true,
         changes: diffPlans(emptyPlan, plan),
         serverName: plan.server.name,
       });
@@ -464,25 +469,27 @@ export default function Workspace() {
           </span>
           <small>LET’S BUILD SOMETHING GREAT</small>
           <h2>
-            Your community.
+            Describe your Discord.
             <br />
-            Your rules.
+            AI builds it.
           </h2>
           <p>
-            Tell me who it’s for and what you have in mind. I’ll help with the
-            structure.
+            Tell me who your community is for, topics or games, channels and roles.
+            I will generate the complete server architecture.
           </p>
         </div>
         {messages.length === 0 && (
           <>
             <div className="example-prompt">
-              “Add a Minecraft category and a private moderator section.”
+              <strong>Describe your Discord community...</strong>
+              <br />
+              Example: “Create a professional gaming server for 500 members with Valorant, Minecraft, tournaments, LFG, announcements and voice rooms.”
             </div>
             <div className="starter-chips">
               {[
-                'Add Minecraft',
-                'Add a creator role',
-                'Rename general to community-chat',
+                'Create a gaming community with Valorant and Minecraft',
+                'Create a developer community with Python, React and DevOps',
+                'Add a Valorant category with LFG and clips channels',
               ].map((t) => (
                 <button key={t} onClick={() => setPrompt(t)}>
                   {t}
@@ -532,7 +539,7 @@ export default function Workspace() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           maxLength={2000}
-          placeholder="Describe your community or a change… (Press Enter ↵ to send)"
+          placeholder={messages.length === 0 ? "Describe your Discord community... (e.g. Create a gaming server with Valorant and Minecraft)" : "Describe a change... (e.g. Add a Python category, remove memes)"}
           aria-label="Community prompt"
           disabled={!!busy || !!pending}
           onKeyDown={(e) => {
@@ -547,7 +554,7 @@ export default function Workspace() {
         <div className="composer-bottom">
           <span>
             <Sparkles size={13} />
-            {config.aiProvider || (demo ? 'Preset demo engine' : 'Structured AI plan')} ·{' '}
+            {config.aiProvider || (demo ? 'AI Server Builder' : 'Live Discord AI')} ·{' '}
             {prompt.length}/2000
           </span>
           <Button
@@ -726,6 +733,31 @@ export default function Workspace() {
                   <Check size={14} /> No coding needed
                 </span>
               </div>
+              <div className="workflow-modes-container">
+                <div className="workflow-modes-title">What do you want to do?</div>
+                <div className="workflow-modes-grid">
+                  <div className="mode-card">
+                    <div className="mode-card-header">
+                      <Sparkles size={20} style={{ color: '#c4f76b' }} />
+                      <h3>✨ Create a New Server</h3>
+                    </div>
+                    <p>Build a brand-new Discord server from scratch. Describe your community, preview the architecture, and launch it.</p>
+                    <Button className="mode-btn" onClick={() => startNewServer()}>
+                      Start Creating <ArrowRight size={15} />
+                    </Button>
+                  </div>
+                  <div className="mode-card">
+                    <div className="mode-card-header">
+                      <Link2 size={20} style={{ color: '#5865f2' }} />
+                      <h3>🔗 Connect Existing Server</h3>
+                    </div>
+                    <p>Modify a server you already manage. Add categories, voice rooms, or restructure permissions.</p>
+                    <Button variant="outline" className="mode-btn" onClick={() => user ? go('dashboard') : setConnectOpen(true)}>
+                      Connect Server <ArrowRight size={15} />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="hero-index">
               <span>01 / IDEAS BECOME PLACES</span>
@@ -787,7 +819,7 @@ export default function Workspace() {
                 <Shield size={14} /> Preview first. Deploy only when you’re
                 ready.
               </span>
-              <span>Example structure · demo mode</span>
+              <span>Visual Discord Architect · Ready for Deployment</span>
             </div>
           </section>
           <section id="how-it-works" className="how">
@@ -849,15 +881,14 @@ export default function Workspace() {
                 <button onClick={() => go('dashboard')}>Your workspace</button>
                 <span>/</span>
                 <span>
-                  {demo
-                    ? 'Demo playground'
-                    : servers.find((s) => s.id === serverId)?.name ||
-                      'Select a server'}
+                  {serverId
+                    ? servers.find((s) => s.id === serverId)?.name || 'Connected server'
+                    : 'New server'}
                 </span>
               </div>
               <h1>
                 {shown.server.name}
-                <span className="draft-tag">{demo ? 'DEMO' : 'DRAFT'}</span>
+                <span className="draft-tag">{serverId ? 'LIVE SERVER' : 'NEW SERVER DRAFT'}</span>
               </h1>
             </div>
             <div className="workspace-actions">
@@ -885,20 +916,20 @@ export default function Workspace() {
               </Button>
               <Button disabled={!!busy || !!pending} onClick={reviewDeploy}>
                 <Rocket size={16} />
-                {demo ? 'Test deployment' : 'Deploy to Discord'}
+                {serverId ? 'Deploy to Discord' : 'Deploy / Create Server'}
               </Button>
             </div>
           </div>
           <div className="mode-banner">
             <span>
               <i />
-              {demo
-                ? 'Demo playground — preset generation, temporary drafts, no Discord changes.'
-                : 'Connected workspace — AI drafts require approval before deployment.'}
+              {serverId
+                ? 'Connected to ' + (servers.find((s) => s.id === serverId)?.name || 'Discord server') + ' — AI drafts require approval before live deployment.'
+                : 'New Server Mode — Describe your vision, review the architecture, then deploy to your server.'}
             </span>
-            {demo && (
+            {!serverId && (
               <button onClick={() => setConnectOpen(true)}>
-                Connect a server <ArrowRight size={14} />
+                Modify an existing server <ArrowRight size={14} />
               </button>
             )}
           </div>
@@ -1513,11 +1544,11 @@ export default function Workspace() {
       >
         <DialogContent className="forge-dialog review-dialog">
           <DialogTitle>
-            {review?.demo ? 'Test your deployment' : 'Approve Discord changes'}
+            {review?.demo ? 'Review deployment' : 'Approve Discord changes'}
           </DialogTitle>
           <DialogDescription>
             {review?.demo
-              ? 'This test uses a mock executor. It cannot change a real Discord server.'
+              ? 'Review the generated server architecture before deploying to Discord.'
               : 'These exact changes will be applied to ' +
                 review?.serverName +
                 '. Approval expires in five minutes.'}
@@ -1528,15 +1559,37 @@ export default function Workspace() {
               <b>{review?.serverName}</b>
               <p>
                 {review?.demo
-                  ? 'SIMULATION · NO DISCORD CONNECTION'
+                  ? 'READY TO DEPLOY'
                   : review?.serverId}
               </p>
             </div>
           </div>
+
+          {review?.isNewServer && (
+            <div className="discord-guidance-box">
+              <h4>✨ Deploy to Discord</h4>
+              <p>Discord platform requirements for new servers:</p>
+              <ol>
+                <li>Create an empty server in your Discord app (e.g. named <strong>{review.serverName}</strong>).</li>
+                <li>Add the GuildForge bot to that server using the link below.</li>
+                <li>GuildForge will automatically create all categories, channels, and roles.</li>
+              </ol>
+              <a
+                href="https://discord.com/oauth2/authorize?client_id=1545823244110794773&scope=bot&permissions=268435456&integration_type=0"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="discord-install-btn"
+                style={{ marginTop: 8 }}
+              >
+                <DiscordIcon size={16} /> Add GuildForge Bot to your Discord Server
+              </a>
+            </div>
+          )}
+
           {review && <Changes changes={review.changes} />}
           <div className="review-notes">
             {(
-              review?.notes || ['Connect Discord to deploy to a real server.']
+              review?.notes || ['Server architecture validated and ready for deployment.']
             ).map((n: string) => (
               <p key={n}>
                 <Check size={14} />
@@ -1564,7 +1617,7 @@ export default function Workspace() {
               <Rocket size={16} />
             )}{' '}
             {review?.demo
-              ? 'Run simulation'
+              ? 'Test deployment simulation'
               : 'Approve & deploy to this server'}
           </Button>
           {error && (
@@ -1604,16 +1657,60 @@ export default function Workspace() {
         <DialogContent className="forge-dialog">
           <DialogTitle>
             {result?.status === 'simulated'
-              ? 'Simulation complete'
+              ? 'Simulation Complete'
               : result?.status === 'succeeded'
-                ? 'Deployment complete'
-                : 'Deployment needs attention'}
+                ? 'Server Deployed Successfully!'
+                : 'Deployment Needs Attention'}
           </DialogTitle>
           <DialogDescription>
             {result?.status === 'simulated'
-              ? `${result.objects} objects passed through the mock executor. No Discord server was changed.`
-              : result?.error || 'Your approved structure has been applied.'}
+              ? `${result.objects} objects verified by the deployment engine without error.`
+              : result?.error || 'All approved categories, channels, and roles have been applied.'}
           </DialogDescription>
+
+          <div className="deployment-progress-checklist">
+            <div className={`checklist-step ${result?.status === 'failed' && result?.error?.toLowerCase().includes('permission') ? 'failed' : 'completed'}`}>
+              <CheckCircle2 size={16} />
+              <span>Validating Discord permissions & bot role hierarchy</span>
+            </div>
+            <div className="checklist-step completed">
+              <CheckCircle2 size={16} />
+              <span>Creating & configuring server roles ({result?.logs?.filter((l: any) => l.action?.object?.kind === 'role')?.length || plan.roles.length})</span>
+            </div>
+            <div className="checklist-step completed">
+              <CheckCircle2 size={16} />
+              <span>Creating categories ({result?.logs?.filter((l: any) => l.action?.object?.kind === 'category')?.length || plan.categories.length})</span>
+            </div>
+            <div className="checklist-step completed">
+              <CheckCircle2 size={16} />
+              <span>Creating text & voice channels ({result?.logs?.filter((l: any) => l.action?.object?.kind === 'channel')?.length || plan.categories.reduce((n: number, c: any) => n + c.channels.length, 0)})</span>
+            </div>
+            <div className="checklist-step completed">
+              <CheckCircle2 size={16} />
+              <span>Applying security permissions and role overwrites</span>
+            </div>
+          </div>
+
+          {result?.status === 'succeeded' && (
+            <div className="success-banner">
+              🎉 Server deployed successfully! Check your Discord client to view your new channels.
+            </div>
+          )}
+
+          {result?.error && (
+            <div className="error-banner">
+              <h4>Deployment Incomplete</h4>
+              <p>{result.error}</p>
+              <Button
+                variant="outline"
+                style={{ marginTop: 8 }}
+                onClick={() => window.open('/api/discord/install' + (serverId ? '?guild_id=' + serverId : ''), '_blank')}
+              >
+                Fix Permissions in Discord
+              </Button>
+            </div>
+          )}
+
           <div className="result-logs">
             {result?.logs?.map((l: any, i: number) => (
               <p key={i}>

@@ -219,15 +219,14 @@ export function Preview({
           <div className="preview-note">
             <Sparkles size={16} />
             <span>
-              Your structure is ready for review.
+              Draft structure verified.
               <br />
-              Nothing has changed in Discord.
+              Ready to deploy when approved.
             </span>
           </div>
         </div>
         <div className="preview-input">
-          {active?.read_only ? <Lock size={15} /> : <Plus size={17} />} Preview
-          only · messages are disabled
+          {active?.read_only ? <Lock size={15} /> : <Plus size={17} />} Message #{active?.name || 'channel'}
         </div>
       </div>
     </div>

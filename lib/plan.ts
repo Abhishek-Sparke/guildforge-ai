@@ -149,189 +149,383 @@ export function demoPlan(prompt: string, current?: Plan): Plan {
       prompt,
     );
 
-  const p: Plan =
-    !isCurrentEmpty && !isFullBuildPrompt && current
-      ? structuredClone(current)
-      : {
-          server: {
-            name: /gaming|valorant|esports/i.test(prompt)
-              ? 'The Gathering'
-              : /study|school/i.test(prompt)
-                ? 'The Study Room'
-                : /develop/i.test(prompt)
-                  ? 'Dev Collective'
-                  : 'Our Community',
-            description: prompt.slice(0, 300),
-          },
-          roles: [
-            { key: 'moderator', name: 'Moderator', color: '#c4f76b' },
-            { key: 'member', name: 'Member', color: '#aeb7c2' },
-          ],
-          categories: [
-            {
-              key: 'information',
-              name: 'INFORMATION',
-              visible_to: [],
-              channels: [ch('announcements', true), ch('rules', true)],
-            },
-            {
-              key: 'community',
-              name: 'COMMUNITY',
-              visible_to: [],
-              channels: [ch('general'), ch('introductions'), ch('memes')],
-            },
-            {
-              key: 'voice',
-              name: 'VOICE LOUNGE',
-              visible_to: [],
-              channels: [
-                { ...ch('lobby'), type: 'voice' },
-                { ...ch('hangout'), type: 'voice' },
-              ],
-            },
-          ],
-          onboarding: [],
-        };
-  const add = (title: string, names: string[], privateRole?: string) => {
-    const k = 'cat-' + slug(title);
-    let cat = p.categories.find(
-      (c) => c.key === k || c.name.toLowerCase() === title.toLowerCase(),
-    );
-    if (!cat) {
-      cat = {
-        key: k,
-        name: title.toUpperCase(),
-        visible_to: privateRole ? [privateRole] : [],
-        channels: [],
-      };
-      p.categories.push(cat);
-    }
-    for (const n of names) {
-      const cSlug = slug(n);
-      if (!cat.channels.some((c) => c.name === cSlug)) {
-        cat.channels.push({
-          key: cat.key + '-' + cSlug,
-          name: cSlug,
-          type: 'text',
-          topic: '',
-          read_only: false,
-          visible_to: [],
-        });
-      }
-    }
-  };
-
-  // Dynamic "Add category: <name>" or "Add category <name>"
-  const catMatches = prompt.matchAll(
-    /(?:add|create|new)\s+category\s*[:#]?\s*([a-zA-Z0-9 _-]+)/gi,
-  );
-  for (const m of catMatches) {
-    const title = m[1].trim().replace(/[.,;]+$/, '');
-    if (title && !/^(channel|role)/i.test(title)) {
-      add(title, [slug(title) + '-chat']);
-    }
-  }
-
-  // Dynamic "Add [voice|text] channel: <name>" or "Add channel <name>"
-  const chanMatches = prompt.matchAll(
-    /(?:add|create|new)\s+(?:a\s+)?(?:(voice|text)\s+)?channel\s*[:#]?\s*([a-zA-Z0-9_-]+)/gi,
-  );
-  for (const m of chanMatches) {
-    const isVoice = m[1]?.toLowerCase() === 'voice' || /voice/i.test(prompt);
-    const rawName = m[2].trim().replace(/[.,;]+$/, '');
-    const chanName = slug(rawName);
-    if (chanName) {
-      let targetCat = p.categories.at(-1);
-      if (!targetCat) {
-        add('General', []);
-        targetCat = p.categories[0];
-      }
-      if (!targetCat.channels.some((c) => c.name === chanName)) {
-        targetCat.channels.push({
-          key: targetCat.key + '-' + chanName,
-          name: chanName,
-          type: isVoice ? 'voice' : 'text',
-          topic: '',
-          read_only: false,
-          visible_to: [],
-        });
-      }
-    }
-  }
-
-  // Dynamic "Add role: <name>" or "Add role <name>"
-  const roleMatches = prompt.matchAll(
-    /(?:add|create|new)\s+role\s*[:#]?\s*([a-zA-Z0-9 _-]+)/gi,
-  );
-  for (const m of roleMatches) {
-    const rName = m[1].trim().replace(/[.,;]+$/, '');
-    const rKey = slug(rName);
-    if (rName && !p.roles.some((r) => r.key === rKey)) {
-      p.roles.push({ key: rKey, name: rName, color: '#c7a3ff' });
-    }
-  }
-
-  if (/minecraft/i.test(prompt))
-    add('Minecraft', ['minecraft-chat', 'minecraft-lfg']);
-  if (/valorant|esports/i.test(prompt))
-    add('Valorant', ['valorant-chat', 'looking-for-team', 'clips']);
-  if (/tournament|event/i.test(prompt)) {
-    if (!p.roles.some((r) => r.key === 'participant'))
-      p.roles.push({
-        key: 'participant',
-        name: 'Tournament Player',
-        color: '#c7a3ff',
-      });
-    add(
-      'Tournaments',
-      ['tournaments', 'tournament-chat'],
-      /private|only|participant/i.test(prompt) ? 'participant' : undefined,
-    );
-  }
-  if (/staff|moderator|private moderator/i.test(prompt))
-    add('Staff', ['staff-chat', 'mod-logs'], 'moderator');
-  if (/developer|coding/i.test(prompt))
-    add('Development', ['code-review', 'help', 'showcase']);
-  if (/study|school|college/i.test(prompt))
-    add('Study', ['resources', 'homework-help', 'study-sessions']);
-  if (/creator|podcast/i.test(prompt)) {
-    add('Creators', ['new-content', 'feedback']);
-    if (!p.roles.some((r) => r.key === 'creator'))
-      p.roles.push({ key: 'creator', name: 'Creator', color: '#ffb782' });
-  }
-  const rename = prompt.match(/rename\s+([\w-]+)\s+to\s+([\w-]+)/i);
-  if (rename)
-    for (const c of p.categories)
-      for (const ch of c.channels)
-        if (ch.name === rename[1]) ch.name = slug(rename[2]);
-  const remove = prompt.match(
-    /(?:remove|delete)\s+(?:the\s+)?([\w-]+)(?:\s+channel)?/i,
-  );
-  if (remove)
-    for (const c of p.categories)
-      c.channels = c.channels.filter((ch) => ch.name !== remove[1]);
-  if (current && /make (?:that|the last) category private/i.test(prompt)) {
-    const c = p.categories.at(-1);
-    if (c) c.visible_to = ['moderator'];
-  }
-  return validatePlan(p);
-}
-function slug(s: string) {
-  return (
+  // Helper slugger
+  const toSlug = (s: string) =>
     s
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 50) || 'community'
-  );
-}
-function ch(name: string, read_only = false): Channel {
-  return {
-    key: name,
-    name,
-    type: 'text',
+      .slice(0, 50) || 'item';
+
+  // Helper channel builder
+  const makeChannel = (name: string, type: 'text' | 'voice' = 'text', read_only = false, visible_to: string[] = []): Channel => ({
+    key: toSlug(name),
+    name: toSlug(name),
+    type,
     topic: '',
     read_only,
-    visible_to: [],
+    visible_to,
+  });
+
+  // If we are modifying an existing plan
+  if (!isCurrentEmpty && !isFullBuildPrompt && current) {
+    const p: Plan = structuredClone(current);
+
+    // 1. Check for single or multiple channel removal (e.g. "Remove the memes channel" or "delete #memes")
+    const removeChanMatches = prompt.matchAll(/(?:remove|delete)\s+(?:the\s+)?(?:channel\s+)?#?([a-zA-Z0-9_-]+)(?:\s+channel)?/gi);
+    for (const rm of removeChanMatches) {
+      const targetName = toSlug(rm[1]);
+      if (targetName && !/^(category|role)/i.test(targetName)) {
+        for (const cat of p.categories) {
+          cat.channels = cat.channels.filter((c) => c.name !== targetName && c.key !== targetName);
+        }
+      }
+    }
+
+    // 2. Check for category removal
+    const removeCatMatch = prompt.match(/(?:remove|delete)\s+(?:the\s+)?category\s*[:#]?\s*([a-zA-Z0-9 _-]+)/i);
+    if (removeCatMatch) {
+      const catSlug = toSlug(removeCatMatch[1]);
+      p.categories = p.categories.filter((c) => toSlug(c.name) !== catSlug && c.key !== 'cat-' + catSlug);
+    }
+
+    // 3. Check for permission/visibility changes (e.g. "Make Python projects visible only to the Python role")
+    const visMatch = prompt.match(/make\s+(?:the\s+)?#?([a-zA-Z0-9 _-]+?)\s+(?:visible\s+only\s+to|private\s+to|restricted\s+to)\s+(?:the\s+)?([a-zA-Z0-9 _-]+?)(?:\s+role)?$/i);
+    if (visMatch) {
+      const targetObjName = toSlug(visMatch[1]);
+      const roleRaw = visMatch[2].trim();
+      const roleKey = 'role-' + toSlug(roleRaw);
+      
+      // Ensure role exists
+      if (!p.roles.some((r) => r.key === roleKey || r.name.toLowerCase() === roleRaw.toLowerCase())) {
+        p.roles.push({ key: roleKey, name: roleRaw.charAt(0).toUpperCase() + roleRaw.slice(1), color: '#9b59b6' });
+      }
+      const actualRole = p.roles.find((r) => r.key === roleKey || r.name.toLowerCase() === roleRaw.toLowerCase())!;
+
+      // Check if target is a channel
+      let matchedChannel = false;
+      for (const cat of p.categories) {
+        for (const ch of cat.channels) {
+          if (ch.name === targetObjName || ch.name.includes(targetObjName) || targetObjName.includes(ch.name)) {
+            ch.visible_to = [actualRole.key];
+            matchedChannel = true;
+          }
+        }
+      }
+
+      // Check if target is a category
+      if (!matchedChannel) {
+        for (const cat of p.categories) {
+          if (toSlug(cat.name) === targetObjName || cat.name.toLowerCase().includes(targetObjName)) {
+            cat.visible_to = [actualRole.key];
+          }
+        }
+      }
+    }
+
+    // 4. Check for adding a category (e.g. "Add a Python category" or "Add category Python")
+    const catNameMatch =
+      prompt.match(/(?:add|create|new)\s+(?:a\s+)?([a-zA-Z0-9_-]+)\s+category\b/i) ||
+      prompt.match(/(?:add|create|new)\s+(?:a\s+)?category\s*[:#]?\s*([a-zA-Z0-9 _-]+)/i);
+
+    if (catNameMatch) {
+      const catName = catNameMatch[1].trim().replace(/[.,;]+$/, '');
+      const catKey = 'cat-' + toSlug(catName);
+      if (catName && !/^(channel|role)/i.test(catName)) {
+        let cat = p.categories.find((c) => c.key === catKey || c.name.toLowerCase() === catName.toLowerCase());
+        if (!cat) {
+          cat = {
+            key: catKey,
+            name: catName.toUpperCase(),
+            visible_to: [],
+            channels: [makeChannel(toSlug(catName) + '-chat')],
+          };
+          p.categories.push(cat);
+        }
+      }
+    }
+
+    // 5. Check for compound channel additions (e.g. "Add Python help and Python projects")
+    const compoundMatch = prompt.match(/(?:add|create|new)\s+(?:channels?\s+)?([a-zA-Z0-9 _-]+?)\s+and\s+([a-zA-Z0-9 _-]+?)(?:\s+(?:under|in|to)\s+(?:category\s+)?([a-zA-Z0-9 _-]+))?$/i);
+    if (compoundMatch && !/category|role/i.test(compoundMatch[1])) {
+      const chan1 = toSlug(compoundMatch[1]);
+      const chan2 = toSlug(compoundMatch[2]);
+      const specifiedCat = compoundMatch[3]?.trim();
+      let targetCat = specifiedCat 
+        ? p.categories.find(c => c.name.toLowerCase().includes(specifiedCat.toLowerCase()))
+        : p.categories.find(c => chan1.includes(toSlug(c.name)) || chan2.includes(toSlug(c.name))) || p.categories.at(-1);
+
+      if (!targetCat) {
+        targetCat = { key: 'cat-general', name: 'GENERAL', visible_to: [], channels: [] };
+        p.categories.push(targetCat);
+      }
+      if (!targetCat.channels.some(c => c.name === chan1)) {
+        targetCat.channels.push(makeChannel(chan1));
+      }
+      if (!targetCat.channels.some(c => c.name === chan2)) {
+        targetCat.channels.push(makeChannel(chan2));
+      }
+    }
+
+    // 6. Check for individual channel additions (e.g. "Add voice channel Tournament Finals" or "Add channel clips")
+    const addChanMatches = prompt.matchAll(/(?:add|create|new)\s+(?:a\s+)?(?:(voice|text)\s+)?channel\s*[:#]?\s*([a-zA-Z0-9 _-]+?)(?:\s+(?:under|in|to)\s+(?:category\s+)?([a-zA-Z0-9 _-]+))?$/gi);
+    for (const m of addChanMatches) {
+      const isVoice = m[1]?.toLowerCase() === 'voice' || /voice/i.test(prompt);
+      const rawName = m[2].trim().replace(/[.,;]+$/, '');
+      const chanName = toSlug(rawName);
+      const specifiedCat = m[3]?.trim();
+      if (chanName && !/^(category|role)/i.test(chanName)) {
+        let targetCat = specifiedCat 
+          ? p.categories.find(c => c.name.toLowerCase().includes(specifiedCat.toLowerCase()))
+          : p.categories.find(c => chanName.includes(toSlug(c.name))) || p.categories.at(-1);
+
+        if (!targetCat) {
+          targetCat = { key: 'cat-general', name: 'COMMUNITY', visible_to: [], channels: [] };
+          p.categories.push(targetCat);
+        }
+        if (!targetCat.channels.some(c => c.name === chanName)) {
+          targetCat.channels.push(makeChannel(chanName, isVoice ? 'voice' : 'text'));
+        }
+      }
+    }
+
+    // 7. Check for role additions (e.g. "Add role Python Developer")
+    const addRoleMatches = prompt.matchAll(/(?:add|create|new)\s+role\s*[:#]?\s*([a-zA-Z0-9 _-]+)/gi);
+    for (const m of addRoleMatches) {
+      const rName = m[1].trim().replace(/[.,;]+$/, '');
+      const rKey = 'role-' + toSlug(rName);
+      if (rName && !p.roles.some((r) => r.key === rKey || r.name.toLowerCase() === rName.toLowerCase())) {
+        p.roles.push({ key: rKey, name: rName, color: '#9b59b6' });
+      }
+    }
+
+    // 8. Check for channel renaming (e.g. "Rename general to community-chat")
+    const rename = prompt.match(/rename\s+([\w-]+)\s+to\s+([\w-]+)/i);
+    if (rename) {
+      for (const c of p.categories) {
+        for (const ch of c.channels) {
+          if (ch.name === rename[1]) {
+            ch.name = toSlug(rename[2]);
+          }
+        }
+      }
+    }
+
+    // 9. Check for "Make that category private"
+    if (/make (?:that|the last) category private/i.test(prompt)) {
+      const c = p.categories.at(-1);
+      if (c) c.visible_to = ['moderator'];
+    }
+
+    return validatePlan(p);
+  }
+
+  // --- BRAND NEW SERVER GENERATION ---
+  // Derive a dynamic server name directly from user prompt
+  let serverName = 'My Community';
+  const nameExplicitMatch = prompt.match(/(?:named|called|title)\s+["']?([^"',.;\n]+)["']?/i);
+  if (nameExplicitMatch) {
+    serverName = nameExplicitMatch[1].trim();
+  } else if (/gaming|valorant|minecraft|esports|game/i.test(prompt)) {
+    if (/valorant/i.test(prompt) && /minecraft/i.test(prompt)) serverName = 'Gaming Community';
+    else if (/valorant/i.test(prompt)) serverName = 'Valorant Protocol';
+    else if (/minecraft/i.test(prompt)) serverName = 'Minecraft Realm';
+    else serverName = 'Gaming Community';
+  } else if (/developer|coding|python|software|tech|engineer/i.test(prompt)) {
+    serverName = 'Developer Hub';
+  } else if (/study|school|university|academic/i.test(prompt)) {
+    serverName = 'Study Room';
+  } else if (/music|audio|producer|beat/i.test(prompt)) {
+    serverName = 'Music Lounge';
+  } else if (/art|design|creative/i.test(prompt)) {
+    serverName = 'Creative Studio';
+  } else {
+    // Pick the most prominent descriptive words from prompt
+    const words = prompt.replace(/[^\w\s]/g, '').split(/\s+/).filter(w => !/^(create|a|an|the|server|for|with|and|discord|community|build|new)$/i.test(w));
+    if (words.length >= 2) {
+      serverName = words.slice(0, 2).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + ' Community';
+    } else if (words.length === 1) {
+      serverName = words[0].charAt(0).toUpperCase() + words[0].slice(1) + ' Server';
+    }
+  }
+
+  const p: Plan = {
+    server: {
+      name: serverName.slice(0, 80),
+      description: prompt.slice(0, 300),
+    },
+    roles: [
+      { key: 'admin', name: 'Admin', color: '#f1c40f' },
+      { key: 'moderator', name: 'Moderator', color: '#2ecc71' },
+      { key: 'member', name: 'Member', color: '#3498db' },
+    ],
+    categories: [
+      {
+        key: 'information',
+        name: 'INFORMATION',
+        visible_to: [],
+        channels: [
+          makeChannel('announcements', 'text', true),
+          makeChannel('rules', 'text', true),
+        ],
+      },
+    ],
+    onboarding: [],
   };
+
+  const isDev = /developer|coding|python|javascript|web|software/i.test(prompt);
+  const isGaming = /gaming|valorant|minecraft|esports|game|tournament/i.test(prompt);
+
+  if (isDev) {
+    p.roles.push({ key: 'developer', name: 'Developer', color: '#e67e22' });
+    if (/python/i.test(prompt)) {
+      p.roles.push({ key: 'python', name: 'Python', color: '#3498db' });
+    }
+
+    p.categories.push({
+      key: 'development',
+      name: 'DEVELOPMENT',
+      visible_to: [],
+      channels: [
+        makeChannel('general'),
+        makeChannel('python'),
+        makeChannel('javascript'),
+        makeChannel('web-development'),
+      ],
+    });
+
+    p.categories.push({
+      key: 'projects',
+      name: 'PROJECTS',
+      visible_to: [],
+      channels: [
+        makeChannel('project-showcase'),
+        makeChannel('project-help'),
+      ],
+    });
+
+    p.categories.push({
+      key: 'voice',
+      name: 'VOICE',
+      visible_to: [],
+      channels: [
+        makeChannel('coding-room', 'voice'),
+        makeChannel('chill-room', 'voice'),
+      ],
+    });
+  } else if (isGaming) {
+    const hasValorant = /valorant/i.test(prompt);
+    const hasMinecraft = /minecraft/i.test(prompt);
+    const hasTournaments = /tournament/i.test(prompt);
+
+    p.categories.push({
+      key: 'community',
+      name: 'COMMUNITY',
+      visible_to: [],
+      channels: [
+        makeChannel('general'),
+        makeChannel('memes'),
+      ],
+    });
+
+    if (hasValorant) {
+      p.roles.push({ key: 'valorant-player', name: 'Valorant', color: '#e74c3c' });
+      p.categories.push({
+        key: 'valorant',
+        name: 'VALORANT',
+        visible_to: [],
+        channels: [
+          makeChannel('valorant-chat'),
+          makeChannel('looking-for-team'),
+          makeChannel('clips'),
+        ],
+      });
+    }
+
+    if (hasMinecraft) {
+      p.roles.push({ key: 'miner', name: 'Minecraft', color: '#27ae60' });
+      p.categories.push({
+        key: 'minecraft',
+        name: 'MINECRAFT',
+        visible_to: [],
+        channels: [
+          makeChannel('minecraft-chat'),
+          makeChannel('server-ip'),
+        ],
+      });
+    }
+
+    if (hasTournaments) {
+      p.roles.push({ key: 'tournament-player', name: 'Tournament Player', color: '#9b59b6' });
+      p.categories.push({
+        key: 'tournaments',
+        name: 'TOURNAMENTS',
+        visible_to: [],
+        channels: [
+          makeChannel('tournament-announcements', 'text', true),
+          makeChannel('tournament-chat'),
+          makeChannel('brackets-and-matches'),
+        ],
+      });
+    }
+
+    if (!hasValorant && !hasMinecraft) {
+      p.categories.push({
+        key: 'gaming',
+        name: 'GAMING',
+        visible_to: [],
+        channels: [
+          makeChannel('game-chat'),
+          makeChannel('lfg'),
+          makeChannel('clips'),
+        ],
+      });
+    }
+
+    p.categories.push({
+      key: 'voice',
+      name: 'VOICE',
+      visible_to: [],
+      channels: [
+        makeChannel('gaming-room', 'voice'),
+        makeChannel('chill-lounge', 'voice'),
+      ],
+    });
+  } else {
+    // General community
+    p.categories.push({
+      key: 'community',
+      name: 'COMMUNITY',
+      visible_to: [],
+      channels: [
+        makeChannel('general'),
+        makeChannel('introductions'),
+        makeChannel('discussions'),
+      ],
+    });
+    p.categories.push({
+      key: 'voice',
+      name: 'VOICE',
+      visible_to: [],
+      channels: [
+        makeChannel('lobby', 'voice'),
+        makeChannel('lounge', 'voice'),
+      ],
+    });
+  }
+
+  // Handle staff / moderator request
+  if (/staff|mod-only|private moderator/i.test(prompt)) {
+    p.categories.push({
+      key: 'staff',
+      name: 'STAFF',
+      visible_to: ['moderator'],
+      channels: [
+        makeChannel('staff-chat', 'text', false, ['moderator']),
+        makeChannel('mod-logs', 'text', false, ['moderator']),
+      ],
+    });
+  }
+
+  return validatePlan(p);
 }
