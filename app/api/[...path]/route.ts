@@ -380,23 +380,30 @@ export async function POST(req: Request) {
       if (previous && previous.server_id !== input.serverId)
         throw new AppError('Build belongs to another server.', 403);
       const live = await snapshot(input.serverId, s.access_token);
-      if (!isAiConfigured())
-        throw new AppError(
-          'Live AI is not configured. Set GEMINI_API_KEY (or OPENAI_API_KEY) to enable.',
-          503,
-        );
       const used = await monthly(s.user_id);
       const current = previous?.plan || server[0].managed_plan;
-      const plan = await generate(
-        input.prompt,
-        current,
-        previous?.messages || [],
-        {
-          name: live.guild.name,
-          channels: live.channels.map((c) => ({ name: c.name, type: c.type })),
-          roles: live.roles.map((r) => ({ name: r.name })),
-        },
-      );
+      let plan: Plan;
+      let aiUsed = false;
+      if (isAiConfigured()) {
+        try {
+          plan = await generate(
+            input.prompt,
+            current,
+            previous?.messages || [],
+            {
+              name: live.guild.name,
+              channels: live.channels.map((c) => ({ name: c.name, type: c.type })),
+              roles: live.roles.map((r) => ({ name: r.name })),
+            },
+          );
+          aiUsed = true;
+        } catch (e) {
+          console.warn('Live AI generation failed, falling back to preset engine:', e);
+          plan = demoPlan(input.prompt, current);
+        }
+      } else {
+        plan = demoPlan(input.prompt, current);
+      }
       const changes = diffPlans(current, plan);
       assertDestruction(input.prompt, changes);
       const id = crypto.randomUUID();
