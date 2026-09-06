@@ -301,18 +301,39 @@ export function checkOperations(
         }
         map[o.key] = existing.id;
       }
-    } else if (
-      s.channels.some(
-        (ch) =>
-          ch.name.toLowerCase() === o.name.toLowerCase() &&
-          (o.kind === 'category'
-            ? ch.type === 4
-            : ch.parent_id === (map[String(o.data.parent)] || null)),
-      )
-    ) {
-      throw new AppError(
-        `An existing channel or category named ${o.name} would conflict with this plan. Rename the planned object.`,
+    } else if (o.kind === 'category') {
+      const existing = s.channels.find(
+        (ch) => ch.type === 4 && ch.name.toLowerCase() === o.name.toLowerCase(),
       );
+      if (existing) {
+        map[o.key] = existing.id;
+      }
+    } else if (o.kind === 'channel') {
+      const parentKey = o.data.parent ? String(o.data.parent) : null;
+      if (parentKey) {
+        const resolvedParentId = map[parentKey];
+        if (resolvedParentId) {
+          const existing = s.channels.find(
+            (ch) =>
+              ch.type !== 4 &&
+              ch.parent_id === resolvedParentId &&
+              ch.name.toLowerCase() === o.name.toLowerCase(),
+          );
+          if (existing) {
+            map[o.key] = existing.id;
+          }
+        }
+      } else {
+        const existing = s.channels.find(
+          (ch) =>
+            ch.type !== 4 &&
+            ch.parent_id === null &&
+            ch.name.toLowerCase() === o.name.toLowerCase(),
+        );
+        if (existing) {
+          map[o.key] = existing.id;
+        }
+      }
     }
   }
 }
@@ -353,7 +374,7 @@ export async function executeChange(
 ) {
   const { object: o, action } = change;
   const id = map[o.key];
-  if (o.kind === 'role' && action === 'create' && id) {
+  if (action === 'create' && id) {
     return id;
   }
   const root =
