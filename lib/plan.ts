@@ -141,58 +141,136 @@ export const templates = [
   'Support Community',
 ];
 export function demoPlan(prompt: string, current?: Plan): Plan {
-  const p: Plan = current
-    ? structuredClone(current)
-    : {
-        server: {
-          name: /gaming|valorant|esports/i.test(prompt)
-            ? 'The Gathering'
-            : /study|school/i.test(prompt)
-              ? 'The Study Room'
-              : /develop/i.test(prompt)
-                ? 'Dev Collective'
-                : 'Our Community',
-          description: prompt.slice(0, 300),
-        },
-        roles: [
-          { key: 'moderator', name: 'Moderator', color: '#c4f76b' },
-          { key: 'member', name: 'Member', color: '#aeb7c2' },
-        ],
-        categories: [
-          {
-            key: 'information',
-            name: 'INFORMATION',
-            visible_to: [],
-            channels: [ch('announcements', true), ch('rules', true)],
+  const isCurrentEmpty =
+    !current ||
+    (current.categories.length === 0 && current.roles.length === 0);
+  const isFullBuildPrompt =
+    /^(create|build|start|design|setup|new|generate)\s+(?:a\s+)?(?:new\s+)?(?:discord\s+)?(?:server|community)\b/i.test(
+      prompt,
+    );
+
+  const p: Plan =
+    !isCurrentEmpty && !isFullBuildPrompt && current
+      ? structuredClone(current)
+      : {
+          server: {
+            name: /gaming|valorant|esports/i.test(prompt)
+              ? 'The Gathering'
+              : /study|school/i.test(prompt)
+                ? 'The Study Room'
+                : /develop/i.test(prompt)
+                  ? 'Dev Collective'
+                  : 'Our Community',
+            description: prompt.slice(0, 300),
           },
-          {
-            key: 'community',
-            name: 'COMMUNITY',
-            visible_to: [],
-            channels: [ch('general'), ch('introductions'), ch('memes')],
-          },
-          {
-            key: 'voice',
-            name: 'VOICE LOUNGE',
-            visible_to: [],
-            channels: [
-              { ...ch('lobby'), type: 'voice' },
-              { ...ch('hangout'), type: 'voice' },
-            ],
-          },
-        ],
-        onboarding: [],
-      };
+          roles: [
+            { key: 'moderator', name: 'Moderator', color: '#c4f76b' },
+            { key: 'member', name: 'Member', color: '#aeb7c2' },
+          ],
+          categories: [
+            {
+              key: 'information',
+              name: 'INFORMATION',
+              visible_to: [],
+              channels: [ch('announcements', true), ch('rules', true)],
+            },
+            {
+              key: 'community',
+              name: 'COMMUNITY',
+              visible_to: [],
+              channels: [ch('general'), ch('introductions'), ch('memes')],
+            },
+            {
+              key: 'voice',
+              name: 'VOICE LOUNGE',
+              visible_to: [],
+              channels: [
+                { ...ch('lobby'), type: 'voice' },
+                { ...ch('hangout'), type: 'voice' },
+              ],
+            },
+          ],
+          onboarding: [],
+        };
   const add = (title: string, names: string[], privateRole?: string) => {
     const k = 'cat-' + slug(title);
-    if (!p.categories.some((c) => c.key === k))
-      p.categories.push({
+    let cat = p.categories.find(
+      (c) => c.key === k || c.name.toLowerCase() === title.toLowerCase(),
+    );
+    if (!cat) {
+      cat = {
         key: k,
         name: title.toUpperCase(),
         visible_to: privateRole ? [privateRole] : [],
-        channels: names.map((n) => ch(n)),
-      });
+        channels: [],
+      };
+      p.categories.push(cat);
+    }
+    for (const n of names) {
+      const cSlug = slug(n);
+      if (!cat.channels.some((c) => c.name === cSlug)) {
+        cat.channels.push({
+          key: cat.key + '-' + cSlug,
+          name: cSlug,
+          type: 'text',
+          topic: '',
+          read_only: false,
+          visible_to: [],
+        });
+      }
+    }
   };
+
+  // Dynamic "Add category: <name>" or "Add category <name>"
+  const catMatches = prompt.matchAll(
+    /(?:add|create|new)\s+category\s*[:#]?\s*([a-zA-Z0-9 _-]+)/gi,
+  );
+  for (const m of catMatches) {
+    const title = m[1].trim().replace(/[.,;]+$/, '');
+    if (title && !/^(channel|role)/i.test(title)) {
+      add(title, [slug(title) + '-chat']);
+    }
+  }
+
+  // Dynamic "Add [voice|text] channel: <name>" or "Add channel <name>"
+  const chanMatches = prompt.matchAll(
+    /(?:add|create|new)\s+(?:a\s+)?(?:(voice|text)\s+)?channel\s*[:#]?\s*([a-zA-Z0-9_-]+)/gi,
+  );
+  for (const m of chanMatches) {
+    const isVoice = m[1]?.toLowerCase() === 'voice' || /voice/i.test(prompt);
+    const rawName = m[2].trim().replace(/[.,;]+$/, '');
+    const chanName = slug(rawName);
+    if (chanName) {
+      let targetCat = p.categories.at(-1);
+      if (!targetCat) {
+        add('General', []);
+        targetCat = p.categories[0];
+      }
+      if (!targetCat.channels.some((c) => c.name === chanName)) {
+        targetCat.channels.push({
+          key: targetCat.key + '-' + chanName,
+          name: chanName,
+          type: isVoice ? 'voice' : 'text',
+          topic: '',
+          read_only: false,
+          visible_to: [],
+        });
+      }
+    }
+  }
+
+  // Dynamic "Add role: <name>" or "Add role <name>"
+  const roleMatches = prompt.matchAll(
+    /(?:add|create|new)\s+role\s*[:#]?\s*([a-zA-Z0-9 _-]+)/gi,
+  );
+  for (const m of roleMatches) {
+    const rName = m[1].trim().replace(/[.,;]+$/, '');
+    const rKey = slug(rName);
+    if (rName && !p.roles.some((r) => r.key === rKey)) {
+      p.roles.push({ key: rKey, name: rName, color: '#c7a3ff' });
+    }
+  }
+
   if (/minecraft/i.test(prompt))
     add('Minecraft', ['minecraft-chat', 'minecraft-lfg']);
   if (/valorant|esports/i.test(prompt))

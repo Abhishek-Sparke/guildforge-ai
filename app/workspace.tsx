@@ -392,8 +392,12 @@ export default function Workspace() {
       });
       return;
     }
+    if (pending) {
+      setError('You have pending changes waiting in the chat. Click "Apply to draft" before deploying.');
+      return;
+    }
     if (!buildId) {
-      setError('Please type a prompt in the chat on the left to generate your server plan, then click "Apply to draft" before deploying.');
+      setError('All current changes are already deployed to your Discord server. Describe a new channel, category, or role in the chat to build and deploy more.');
       return;
     }
     await run(
@@ -422,6 +426,7 @@ export default function Workspace() {
             confirmDelete,
           });
           setResult(await request('deployments/' + r.id));
+          setBuildId(undefined);
         }
         setReview(null);
       },

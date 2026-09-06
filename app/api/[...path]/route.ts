@@ -410,7 +410,12 @@ export async function POST(req: Request) {
       const messages = [
         ...(previous?.messages || []),
         { role: 'user', content: input.prompt },
-        { role: 'assistant', content: 'Plan generated for review.' },
+        {
+          role: 'assistant',
+          content: changes.length
+            ? 'Plan generated for review.'
+            : 'No new structural changes detected for this prompt. Try asking to add specific channels (e.g. "Add a music category" or "Add channel clips").',
+        },
       ].slice(-20);
       await sql()`INSERT INTO builds(id,user_id,server_id,prompt,plan,messages) VALUES(${id},${s.user_id},${input.serverId},${input.prompt},${JSON.stringify(plan)}::jsonb,${JSON.stringify(messages)}::jsonb)`;
       console.info(
@@ -433,7 +438,7 @@ export async function POST(req: Request) {
         changes = diffPlans(server[0].managed_plan, plan);
       if (!changes.length)
         throw new AppError(
-          'This plan has no deployable changes. Server title and onboarding are suggestions only.',
+          'All changes in this draft are already deployed to your Discord server. Enter a new change in the chat to add channels, categories, or roles.',
         );
       const live = await snapshot(build.server_id, s.access_token);
       checkOperations(plan, changes, live, server[0].object_map);
