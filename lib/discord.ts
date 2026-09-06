@@ -371,20 +371,61 @@ export async function executeChange(
   bot: string,
   change: Change,
   map: Record<string, string>,
+  live?: { roles?: any[]; channels?: any[] },
 ) {
   const { object: o, action } = change;
-  const id = map[o.key];
+  let id = map[o.key];
+
+  // If creating and we already mapped this object, return the existing ID
   if (action === 'create' && id) {
     return id;
   }
+
+  // Deduplication on retry: check if object already exists in live Discord state
+  if (action === 'create' && !id && live) {
+    if (o.kind === 'role' && Array.isArray(live.roles)) {
+      const existing = live.roles.find(
+        (r) => r.name.toLowerCase() === o.name.toLowerCase() && r.name !== '@everyone',
+      );
+      if (existing) {
+        id = existing.id;
+        map[o.key] = id;
+      }
+    } else if (o.kind === 'category' && Array.isArray(live.channels)) {
+      const existing = live.channels.find(
+        (c) => c.type === 4 && c.name.toLowerCase() === o.name.toLowerCase(),
+      );
+      if (existing) {
+        id = existing.id;
+        map[o.key] = id;
+      }
+    } else if (o.kind === 'channel' && Array.isArray(live.channels)) {
+      const parentId = o.data.parent ? map[String(o.data.parent)] : undefined;
+      const expectedType = o.data.type === 'voice' ? 2 : 0;
+      const existing = live.channels.find(
+        (c) =>
+          c.type === expectedType &&
+          c.name.toLowerCase() === o.name.toLowerCase() &&
+          (parentId ? c.parent_id === parentId : true),
+      );
+      if (existing) {
+        id = existing.id;
+        map[o.key] = id;
+      }
+    }
+  }
+
   const root =
     o.kind === 'role' ? `/guilds/${guild}/roles` : `/guilds/${guild}/channels`;
   const target = o.kind === 'role' ? root + '/' + id : '/channels/' + id;
+
   if (action === 'delete') {
+    if (!id) return null;
     await call(target, 'DELETE');
     delete map[o.key];
     return id;
   }
+
   let data: Record<string, unknown> = { name: o.name };
   if (o.kind === 'role') {
     data = {
@@ -404,22 +445,26 @@ export async function executeChange(
       map,
     );
     if (o.kind === 'category') {
-      if (action === 'create') data.type = 4;
+      if (!id && action === 'create') data.type = 4;
     } else {
       if (!map[String(o.data.parent)])
-        throw new AppError('Missing category mapping.');
+        throw new AppError(`Missing category mapping for channel "${o.name}".`);
       data.parent_id = map[String(o.data.parent)];
-      if (action === 'create') data.type = o.data.type === 'voice' ? 2 : 0;
+      if (!id && action === 'create') data.type = o.data.type === 'voice' ? 2 : 0;
       if (o.data.type === 'text') data.topic = o.data.topic;
     }
   }
-  const result = await call(
-    action === 'create' ? root : target,
-    action === 'create' ? 'POST' : 'PATCH',
-    data,
-  );
-  map[o.key] = result.id;
-  return result.id;
+
+  const isCreateNew = action === 'create' && !id;
+  const method = isCreateNew ? 'POST' : 'PATCH';
+  const url = isCreateNew ? root : target;
+
+  const result = await call(url, method, data);
+  const finalId = result?.id || id;
+  if (finalId) {
+    map[o.key] = finalId;
+  }
+  return finalId;
 }
 export async function mockExecute(plan: Plan) {
   const calls: { path: string; method: string; data: unknown }[] = [];

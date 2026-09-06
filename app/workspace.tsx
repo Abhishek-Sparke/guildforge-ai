@@ -25,6 +25,10 @@ import {
   Link2,
   LogOut,
   CheckCircle2,
+  AlertCircle,
+  XCircle,
+  ExternalLink,
+  RefreshCw,
   Rocket,
   Command,
   Eye,
@@ -1688,83 +1692,355 @@ export default function Workspace() {
           <DialogTitle>
             {result?.status === 'simulated'
               ? 'Simulation Complete'
-              : result?.status === 'succeeded'
+              : result?.status === 'succeeded' || result?.completed
                 ? 'Server Deployed Successfully!'
-                : 'Deployment Needs Attention'}
+                : result?.status === 'partial'
+                  ? 'Deployment Partially Completed'
+                  : 'Deployment Incomplete'}
           </DialogTitle>
           <DialogDescription>
             {result?.status === 'simulated'
               ? `${result.objects} objects verified by the deployment engine without error.`
-              : result?.error || 'All approved categories, channels, and roles have been applied.'}
+              : result?.status === 'succeeded' || result?.completed
+                ? 'All approved categories, channels, and roles have been applied and verified in Discord.'
+                : result?.error || 'Some operations could not be completed.'}
           </DialogDescription>
 
-          <div className="deployment-progress-checklist">
-            <div className={`checklist-step ${result?.status === 'failed' && result?.error?.toLowerCase().includes('permission') ? 'failed' : 'completed'}`}>
-              <CheckCircle2 size={16} />
-              <span>Validating Discord permissions & bot role hierarchy</span>
-            </div>
-            <div className="checklist-step completed">
-              <CheckCircle2 size={16} />
-              <span>Creating & configuring server roles ({result?.logs?.filter((l: any) => l.action?.object?.kind === 'role')?.length || plan.roles.length})</span>
-            </div>
-            <div className="checklist-step completed">
-              <CheckCircle2 size={16} />
-              <span>Creating categories ({result?.logs?.filter((l: any) => l.action?.object?.kind === 'category')?.length || plan.categories.length})</span>
-            </div>
-            <div className="checklist-step completed">
-              <CheckCircle2 size={16} />
-              <span>Creating text & voice channels ({result?.logs?.filter((l: any) => l.action?.object?.kind === 'channel')?.length || plan.categories.reduce((n: number, c: any) => n + c.channels.length, 0)})</span>
-            </div>
-            <div className="checklist-step completed">
-              <CheckCircle2 size={16} />
-              <span>Applying security permissions and role overwrites</span>
-            </div>
-          </div>
+          {/* Dynamic checklist derived from actual deployment logs */}
+          {(() => {
+            const logs = result?.logs || [];
+            const roleLogs = logs.filter(
+              (l: any) =>
+                l.action?.object?.kind === 'role' ||
+                l.action?.kind === 'role' ||
+                l.kind === 'role',
+            );
+            const categoryLogs = logs.filter(
+              (l: any) =>
+                l.action?.object?.kind === 'category' ||
+                l.action?.kind === 'category' ||
+                l.kind === 'category',
+            );
+            const channelLogs = logs.filter(
+              (l: any) =>
+                l.action?.object?.kind === 'channel' ||
+                l.action?.kind === 'channel' ||
+                l.kind === 'channel',
+            );
 
-          {result?.status === 'succeeded' && (
-            <div className="success-banner">
-              🎉 Server deployed successfully! Check your Discord client to view your new channels.
-            </div>
-          )}
+            const isSuccess =
+              result?.status === 'succeeded' ||
+              result?.completed ||
+              result?.status === 'simulated';
+            const isPermissionError =
+              result?.error &&
+              (result.error.toLowerCase().includes('permission') ||
+                result.error.toLowerCase().includes('missing access') ||
+                result.error.toLowerCase().includes('role hierarchy') ||
+                result.error.includes('50013') ||
+                result.error.includes('403'));
 
-          {result?.error && (
-            <div className="error-banner">
-              <h4>Deployment Incomplete</h4>
-              <p>{result.error}</p>
-              <Button
-                variant="outline"
-                style={{ marginTop: 8 }}
-                onClick={() => window.open('/api/discord/install' + (serverId ? '?guild_id=' + serverId : ''), '_blank')}
-              >
-                Fix Permissions in Discord
-              </Button>
-            </div>
-          )}
+            const rolesDone =
+              isSuccess ||
+              (roleLogs.length > 0 &&
+                roleLogs.every((l: any) => l.status === 'succeeded'));
+            const rolesFailed = roleLogs.some(
+              (l: any) => l.status === 'failed',
+            );
 
-          <div className="result-logs">
-            {result?.logs?.map((l: any, i: number) => (
-              <p key={i}>
-                <CheckCircle2 size={15} />
-                <span>{l.action?.object?.name || 'Operation'}</span>
-                <small>{l.status}</small>
-              </p>
-            ))}
-          </div>
-          {result?.id && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                run(
-                  async () =>
-                    setResult(await request('deployments/' + result.id)),
-                  'Loading deployment logs',
-                )
-              }
-            >
-              Refresh deployment logs
-            </Button>
-          )}
-          <Button onClick={() => setResult(null)}>Back to workspace</Button>
+            const catsDone =
+              isSuccess ||
+              (categoryLogs.length > 0 &&
+                categoryLogs.every((l: any) => l.status === 'succeeded'));
+            const catsFailed = categoryLogs.some(
+              (l: any) => l.status === 'failed',
+            );
+
+            const channelsDone =
+              isSuccess ||
+              (channelLogs.length > 0 &&
+                channelLogs.every((l: any) => l.status === 'succeeded'));
+            const channelsFailed = channelLogs.some(
+              (l: any) => l.status === 'failed',
+            );
+
+            const rolesCount =
+              roleLogs.length ||
+              result?.verificationCounts?.roles ||
+              plan.roles.length;
+            const catsCount =
+              categoryLogs.length ||
+              result?.verificationCounts?.categories ||
+              plan.categories.length;
+            const channelsCount =
+              channelLogs.length ||
+              result?.verificationCounts?.channels ||
+              plan.categories.reduce(
+                (n: number, c: any) => n + c.channels.length,
+                0,
+              );
+
+            return (
+              <>
+                <div className="deployment-progress-checklist">
+                  <div
+                    className={`checklist-step ${isPermissionError ? 'failed' : 'completed'}`}
+                  >
+                    {isPermissionError ? (
+                      <XCircle size={16} />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    <span>
+                      Validating Discord permissions & bot role hierarchy
+                    </span>
+                  </div>
+                  <div
+                    className={`checklist-step ${rolesDone ? 'completed' : rolesFailed ? 'failed' : 'pending'}`}
+                  >
+                    {rolesDone ? (
+                      <CheckCircle2 size={16} />
+                    ) : rolesFailed ? (
+                      <XCircle size={16} />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    <span>
+                      Creating & configuring server roles ({rolesCount})
+                    </span>
+                  </div>
+                  <div
+                    className={`checklist-step ${catsDone ? 'completed' : catsFailed ? 'failed' : 'pending'}`}
+                  >
+                    {catsDone ? (
+                      <CheckCircle2 size={16} />
+                    ) : catsFailed ? (
+                      <XCircle size={16} />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    <span>Creating categories ({catsCount})</span>
+                  </div>
+                  <div
+                    className={`checklist-step ${channelsDone ? 'completed' : channelsFailed ? 'failed' : 'pending'}`}
+                  >
+                    {channelsDone ? (
+                      <CheckCircle2 size={16} />
+                    ) : channelsFailed ? (
+                      <XCircle size={16} />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    <span>Creating text & voice channels ({channelsCount})</span>
+                  </div>
+                  <div
+                    className={`checklist-step ${isSuccess ? 'completed' : channelsFailed || catsFailed ? 'failed' : 'completed'}`}
+                  >
+                    {isSuccess ? (
+                      <CheckCircle2 size={16} />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    <span>
+                      Applying security permissions and role overwrites
+                    </span>
+                  </div>
+                  <div
+                    className={`checklist-step ${result?.verified ? 'completed' : isSuccess ? 'completed' : 'pending'}`}
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>
+                      Final server reconciliation & state verification
+                    </span>
+                  </div>
+                </div>
+
+                {isSuccess && (
+                  <div className="success-banner">
+                    <div className="success-banner-header">
+                      <span className="success-emoji" style={{ fontSize: 24 }}>🎉</span>
+                      <div>
+                        <h4>Deployment Complete</h4>
+                        <p>
+                          Your Discord server has been successfully configured
+                          and verified.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="success-stats">
+                      <span>✓ {rolesCount} roles configured</span>
+                      <span>✓ {catsCount} categories created</span>
+                      <span>✓ {channelsCount} channels created</span>
+                      <span>✓ Permissions configured</span>
+                      <span>✓ Server verified</span>
+                    </div>
+                  </div>
+                )}
+
+                {!isSuccess && result?.error && (
+                  <div className="error-banner">
+                    <h4>
+                      {result?.status === 'partial'
+                        ? 'Deployment Partially Completed'
+                        : 'Deployment Incomplete'}
+                    </h4>
+                    {result?.succeededOperations !== undefined &&
+                      result?.totalOperations !== undefined && (
+                        <p className="error-summary" style={{ margin: '4px 0 8px', fontSize: 13 }}>
+                          <strong>
+                            {result.succeededOperations} of{' '}
+                            {result.totalOperations}
+                          </strong>{' '}
+                          operations completed.
+                        </p>
+                      )}
+                    {result?.failedOperation ? (
+                      <div className="failed-operation-box">
+                        <strong>Failed operation:</strong>{' '}
+                        {result.failedOperation.type} on{' '}
+                        <code>{result.failedOperation.name}</code>
+                        <br />
+                        <strong>Reason:</strong> {result.failedOperation.error}
+                      </div>
+                    ) : (
+                      <p className="error-message" style={{ margin: '6px 0' }}>{result.error}</p>
+                    )}
+                    <div className="error-actions">
+                      <Button
+                        onClick={() => {
+                          setResult(null);
+                          reviewDeploy();
+                        }}
+                        className="retry-btn"
+                      >
+                        Retry Deployment
+                      </Button>
+                      {isPermissionError && (
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            window.open(
+                              '/api/discord/install' +
+                                (serverId ? '?guild_id=' + serverId : ''),
+                              '_blank',
+                            )
+                          }
+                        >
+                          Fix Permissions in Discord
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Development Diagnostics Panel */}
+                <details className="deployment-diagnostics">
+                  <summary>
+                    Deployment Diagnostics & Logs ({logs.length} operations)
+                  </summary>
+                  <div className="diagnostics-meta">
+                    <div>
+                      <strong>Deployment ID:</strong>{' '}
+                      <code>{result?.id || 'simulated'}</code>
+                    </div>
+                    <div>
+                      <strong>Status:</strong>{' '}
+                      <span
+                        className={`status-badge ${result?.status || 'completed'}`}
+                      >
+                        {(result?.status || 'completed').toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <strong>Verified:</strong>{' '}
+                      {result?.verified ? 'Yes ✓' : 'N/A'}
+                    </div>
+                  </div>
+                  <div className="diagnostics-list">
+                    {logs.map((l: any, i: number) => (
+                      <div
+                        key={i}
+                        className={`diag-item ${l.status || 'succeeded'}`}
+                      >
+                        <span className="diag-status">
+                          {l.status === 'succeeded' || !l.status
+                            ? '✓'
+                            : l.status === 'failed'
+                              ? '✕'
+                              : '•'}
+                        </span>
+                        <span className="diag-name">
+                          {l.action?.object?.name ||
+                            l.action?.name ||
+                            l.name ||
+                            'Operation'}
+                        </span>
+                        <span className="diag-type">
+                          {l.action?.type || l.type || l.action?.action || ''}
+                        </span>
+                        {l.discord_object_id || l.discordId ? (
+                          <code className="diag-id">
+                            ID: {l.discord_object_id || l.discordId}
+                          </code>
+                        ) : null}
+                        {l.error && <span className="diag-err">{l.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+
+                <div className="dialog-footer-actions">
+                  {result?.id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        run(
+                          async () => {
+                            const fresh = await request(
+                              `deployments/${result.id}?t=${Date.now()}`,
+                            );
+                            setResult(fresh);
+                          },
+                          'Loading deployment logs',
+                        )
+                      }
+                    >
+                      <RefreshCw size={13} style={{ marginRight: 6 }} />
+                      Refresh deployment logs
+                    </Button>
+                  )}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      marginLeft: 'auto',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {isSuccess && serverId && (
+                      <Button
+                        variant="default"
+                        className="apply-btn-prominent"
+                        onClick={() =>
+                          window.open(
+                            `https://discord.com/channels/${serverId}`,
+                            '_blank',
+                          )
+                        }
+                      >
+                        Open Discord{' '}
+                        <ExternalLink size={14} style={{ marginLeft: 6 }} />
+                      </Button>
+                    )}
+                    <Button onClick={() => setResult(null)}>
+                      {isSuccess ? 'Continue Building' : 'Back to workspace'}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

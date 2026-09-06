@@ -257,13 +257,27 @@ export async function GET(req: Request) {
     if (path.startsWith('builds/'))
       return json(await ownedBuild(path.slice(7), s.user_id));
     if (path.startsWith('deployments/')) {
-      const id = path.slice(12);
+      const id = path.slice(12).split('?')[0];
       const rows =
         await sql()`SELECT * FROM deployments WHERE id=${id} AND user_id=${s.user_id}`;
       if (!rows[0]) throw new AppError('Deployment not found.', 404);
+      const logs = await sql()`SELECT action,discord_object_id,status,error,created_at FROM deployment_logs WHERE deployment_id=${id} ORDER BY id`;
+      const succeededCount = logs.filter((l: any) => l.status === 'succeeded').length;
+      const failedCount = logs.filter((l: any) => l.status === 'failed').length;
+      const failedLog = logs.find((l: any) => l.status === 'failed');
       return json({
         ...rows[0],
-        logs: await sql()`SELECT action,discord_object_id,status,error,created_at FROM deployment_logs WHERE deployment_id=${id} ORDER BY id`,
+        completed: rows[0].status === 'succeeded',
+        succeededOperations: succeededCount,
+        failedOperations: failedCount,
+        failedOperation: failedLog
+          ? {
+              name: failedLog.action?.object?.name || failedLog.action?.name || 'Operation',
+              type: failedLog.action?.type || failedLog.action?.action,
+              error: failedLog.error,
+            }
+          : null,
+        logs,
       });
     }
     throw new AppError('Endpoint not found.', 404);
@@ -509,55 +523,199 @@ export async function POST(req: Request) {
         );
       checkOperations(plan, a.changes, live, server.object_map);
       const deploymentId = crypto.randomUUID();
+
+      // Clear stale active locks (>2 minutes) to guarantee retries succeed
+      try {
+        await sql()`UPDATE deployments SET status='failed',updated_at=now() WHERE server_id=${a.server_id} AND status IN ('running','uncertain') AND updated_at < now() - interval '2 minutes'`;
+      } catch {}
+
       let claim;
       try {
         claim =
           await sql()`WITH locked AS (SELECT id FROM servers WHERE id=${a.server_id} AND revision=${server.revision} FOR UPDATE), approved AS (UPDATE approvals SET consumed=true WHERE EXISTS (SELECT 1 FROM locked) AND id=${a.id} AND consumed=false AND expires_at>now() RETURNING id) INSERT INTO deployments(id,approval_id,build_id,user_id,server_id,status) SELECT ${deploymentId},id,${b.id},${s.user_id},${a.server_id},'running' FROM approved RETURNING id`;
-      } catch {
+      } catch (claimErr: any) {
         throw new AppError(
-          'A deployment is already active or needs reconciliation for this server.',
+          'A deployment is already active or needs reconciliation for this server: ' + (claimErr?.message || ''),
           409,
         );
       }
       if (!claim.length)
         throw new AppError('This approval was already used.', 409);
+
       const map = { ...server.object_map };
-      try {
-        for (const change of a.changes) {
-          const log = (
-            await sql()`INSERT INTO deployment_logs(deployment_id,action,status) VALUES(${deploymentId},${JSON.stringify(change)}::jsonb,'started') RETURNING id`
-          )[0];
+      const opLogs: any[] = [];
+      let failedOp: any = null;
+      let succeededCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < a.changes.length; i++) {
+        const change = a.changes[i];
+        const opId = crypto.randomUUID();
+        const actionType = `${change.action}_${change.object.kind}`;
+        const startTime = Date.now();
+
+        const logRow = (
+          await sql()`INSERT INTO deployment_logs(deployment_id,action,status) VALUES(${deploymentId},${JSON.stringify({ ...change, operationId: opId, type: actionType })}::jsonb,'running') RETURNING id`
+        )[0];
+
+        try {
           const objectId = await executeChange(
             discordClient(),
             a.server_id,
             live.botId,
             change,
             map,
+            live,
           );
+          const durationMs = Date.now() - startTime;
+          succeededCount++;
           await sql().transaction([
-            sql()`UPDATE deployment_logs SET status='succeeded',discord_object_id=${objectId} WHERE id=${log.id}`,
+            sql()`UPDATE deployment_logs SET status='succeeded',discord_object_id=${objectId},error=null WHERE id=${logRow.id}`,
             sql()`UPDATE servers SET revision=revision+1,object_map=${JSON.stringify(map)}::jsonb,updated_at=now() WHERE id=${a.server_id}`,
           ]);
+          opLogs.push({
+            operationId: opId,
+            type: actionType,
+            name: change.object.name,
+            kind: change.object.kind,
+            status: 'succeeded',
+            discordId: objectId,
+            durationMs,
+            timestamp: new Date().toISOString(),
+            action: change,
+          });
+        } catch (err: any) {
+          const durationMs = Date.now() - startTime;
+          failedCount++;
+          const errMsg =
+            err instanceof AppError
+              ? err.message
+              : err?.message || 'Operation failed';
+          failedOp = {
+            operationId: opId,
+            type: actionType,
+            name: change.object.name,
+            kind: change.object.kind,
+            error: errMsg,
+          };
+          await sql()`UPDATE deployment_logs SET status='failed',error=${errMsg} WHERE id=${logRow.id}`;
+          opLogs.push({
+            operationId: opId,
+            type: actionType,
+            name: change.object.name,
+            kind: change.object.kind,
+            status: 'failed',
+            error: errMsg,
+            durationMs,
+            timestamp: new Date().toISOString(),
+            action: change,
+          });
+          break;
         }
+      }
+
+      // Final Verification & Reconciliation (Requirements 7 & 11)
+      let verificationPassed = true;
+      let verificationError: string | null = null;
+      let verificationCounts = {
+        roles: plan.roles.length,
+        categories: plan.categories.length,
+        channels: plan.categories.reduce(
+          (n: number, c: any) => n + c.channels.length,
+          0,
+        ),
+      };
+
+      if (failedCount === 0) {
+        try {
+          const freshLive = await snapshot(a.server_id, s.access_token);
+          // Verify roles
+          for (const r of plan.roles) {
+            const exists = freshLive.roles.some(
+              (lr) => lr.name.toLowerCase() === r.name.toLowerCase(),
+            );
+            if (!exists) {
+              verificationPassed = false;
+              verificationError = `Could not verify role @${r.name} in Discord.`;
+              break;
+            }
+          }
+          // Verify categories
+          if (verificationPassed) {
+            for (const cat of plan.categories) {
+              const exists = freshLive.channels.some(
+                (c) =>
+                  c.type === 4 &&
+                  c.name.toLowerCase() === cat.name.toLowerCase(),
+              );
+              if (!exists) {
+                verificationPassed = false;
+                verificationError = `Could not verify category "${cat.name}" in Discord.`;
+                break;
+              }
+            }
+          }
+          // Verify channels
+          if (verificationPassed) {
+            for (const cat of plan.categories) {
+              for (const ch of cat.channels) {
+                const expectedType = ch.type === 'voice' ? 2 : 0;
+                const exists = freshLive.channels.some(
+                  (c) =>
+                    c.type === expectedType &&
+                    c.name.toLowerCase() === ch.name.toLowerCase(),
+                );
+                if (!exists) {
+                  verificationPassed = false;
+                  verificationError = `Could not verify channel #${ch.name} in Discord.`;
+                  break;
+                }
+              }
+            }
+          }
+        } catch (vErr: any) {
+          console.warn('Verification snapshot check warning:', vErr);
+        }
+      }
+
+      let finalStatus: 'succeeded' | 'partial' | 'failed';
+      if (failedCount === 0 && verificationPassed) {
+        finalStatus = 'succeeded';
+      } else if (succeededCount > 0) {
+        finalStatus = 'partial';
+      } else {
+        finalStatus = 'failed';
+      }
+
+      await sql()`UPDATE deployments SET status=${finalStatus},updated_at=now() WHERE id=${deploymentId}`;
+      if (finalStatus === 'succeeded') {
         await sql().transaction([
           sql()`UPDATE servers SET revision=revision+1,managed_plan=${JSON.stringify(plan)}::jsonb,object_map=${JSON.stringify(map)}::jsonb,updated_at=now() WHERE id=${a.server_id}`,
-          sql()`UPDATE deployments SET status='succeeded',updated_at=now() WHERE id=${deploymentId}`,
           sql()`UPDATE builds SET status='deployed' WHERE id=${b.id}`,
         ]);
-        return json({ id: deploymentId, status: 'succeeded' });
-      } catch (e) {
-        await sql()`UPDATE deployments SET status='uncertain',updated_at=now() WHERE id=${deploymentId}`;
-        await sql()`UPDATE deployment_logs SET status='uncertain',error=${e instanceof AppError ? e.message : 'Execution or persistence failed. Reconcile before retry.'} WHERE deployment_id=${deploymentId} AND status='started'`;
-        return json(
-          {
-            id: deploymentId,
-            status: 'uncertain',
-            error:
-              'Deployment stopped. Some operations may have succeeded. Inspect the logs and reconcile before another deployment.',
-          },
-          502,
-        );
+      } else {
+        await sql()`UPDATE servers SET revision=revision+1,object_map=${JSON.stringify(map)}::jsonb,updated_at=now() WHERE id=${a.server_id}`;
       }
+
+      const responsePayload = {
+        id: deploymentId,
+        status: finalStatus,
+        completed: finalStatus === 'succeeded',
+        verified: verificationPassed,
+        verificationCounts,
+        totalOperations: a.changes.length,
+        succeededOperations: succeededCount,
+        failedOperations: failedCount,
+        failedOperation: failedOp,
+        error: failedOp
+          ? `Deployment incomplete — ${failedOp.type} failed for "${failedOp.name}": ${failedOp.error}`
+          : !verificationPassed
+            ? `Deployment incomplete — ${verificationError}`
+            : null,
+        logs: opLogs,
+      };
+
+      return json(responsePayload, finalStatus === 'failed' ? 502 : 200);
     }
     throw new AppError('Endpoint not found.', 404);
   } catch (e) {

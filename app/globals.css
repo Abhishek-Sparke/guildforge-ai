@@ -2758,3 +2758,157 @@ button.channel:hover {
   padding-left: 18px;
 }
 
+.deployment-progress-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.checklist-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.checklist-step.completed {
+  color: var(--foreground);
+}
+.checklist-step.completed svg {
+  color: var(--primary);
+}
+.checklist-step.failed {
+  color: #f87171;
+}
+.checklist-step.failed svg {
+  color: #f87171;
+}
+.checklist-step.pending {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+.success-banner-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.success-banner-header h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.success-banner-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--foreground);
+}
+.success-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(125, 222, 77, 0.25);
+  font-size: 12px;
+  color: var(--foreground);
+}
+.failed-operation-box {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #fca5a5;
+}
+.error-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.retry-btn {
+  background: var(--primary) !important;
+  color: #0b1108 !important;
+  font-weight: 600;
+}
+.deployment-diagnostics {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.deployment-diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  user-select: none;
+}
+.deployment-diagnostics summary:hover {
+  color: var(--foreground);
+}
+.diagnostics-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.diagnostics-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.diag-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.diag-item.succeeded .diag-status {
+  color: var(--primary);
+}
+.diag-item.failed {
+  background: rgba(239, 68, 68, 0.1);
+}
+.diag-item.failed .diag-status {
+  color: #f87171;
+}
+.diag-name {
+  font-weight: 600;
+}
+.diag-type {
+  color: var(--muted-foreground);
+}
+.diag-id {
+  color: var(--primary);
+}
+.diag-err {
+  color: #f87171;
+  margin-left: auto;
+}
+.dialog-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+

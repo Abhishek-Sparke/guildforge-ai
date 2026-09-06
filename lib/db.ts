@@ -41,9 +41,20 @@ function createLocalSql() {
   return queryFn;
 }
 
+let neonClient: any = null;
+
 export function sql() {
   if (process.env.DATABASE_URL) {
-    return neon(process.env.DATABASE_URL);
+    if (!neonClient) {
+      neonClient = neon(process.env.DATABASE_URL);
+    }
+    const queryFn: any = (strings: TemplateStringsArray, ...values: any[]) => {
+      return neonClient(strings, ...values);
+    };
+    queryFn.transaction = async (queries: any[]) => {
+      return Promise.all(queries);
+    };
+    return queryFn;
   }
   return createLocalSql();
 }
